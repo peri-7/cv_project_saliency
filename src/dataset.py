@@ -54,6 +54,8 @@ class FeatureDataset(Dataset):
         # 1. Load the pre-extracted multi-scale feature dictionary
         feat_path = os.path.join(self.features_dir, feat_name)
         extracted_features = torch.load(feat_path)
+        # Strip the dummy batch dimension: [1, C, H, W] becomes [C, H, W]
+        extracted_features = {k: v.squeeze(0) for k, v in extracted_features.items()}
         
         # 2. Load the Continuous Saliency Map (For KLD, CC, SIM loss)
         # Saliency maps are usually provided as grayscale images

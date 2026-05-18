@@ -2,6 +2,7 @@ import os
 import torch
 import numpy as np
 from PIL import Image
+import scipy.io as sio
 from torch.utils.data import Dataset
 import torchvision.transforms as transforms
 
@@ -62,10 +63,47 @@ class FeatureDataset(Dataset):
         map_path = os.path.join(self.maps_dir, base_name + '.png')
         saliency_map = Image.open(map_path).convert('L')
         
-        # 3. Load the Discrete Fixation Map (For NSS, AUC, IG evaluation)
-        # Fixation maps are binary (0 for no fixation, 255 for fixation)
-        fix_path = os.path.join(self.fixations_dir, base_name + '.png')
-        fixation_map = Image.open(fix_path).convert('L')
+        # 3. Load the Discrete Fixation Map (.mat file)
+        fix_path = os.path.join(self.fixations_dir, base_name + '.mat')
+        mat_data = sio.loadmat(fix_path)
+        
+        # We synthesize our own blank ground-truth matrix
+        fixation_matrix = np.zeros((480, 640), dtype=np.float32)
+        
+        # Strategy A: Official SALICON Struct Format (gaze coordinates)
+        if 'gaze' in mat_data:
+            gaze_data = mat_data['gaze']
+            # Loop through each human subject's data
+            for i in range(gaze_data.shape[1]):
+                
+                # Extract the fixations for this subject
+                subject_fixations = gaze_data[0, i]['fixations']
+                
+                # 1. THE UNWRAPPER: If SciPy wrapped it in an object shell, break it open.
+                # If it didn't, this safely ignores it.
+                if subject_fixations.dtype == object and subject_fixations.size == 1:
+                    subject_fixations = subject_fixations[0, 0]
+                    
+                # 2. EDGE CASE: If a subject only made 1 single fixation, 
+                # numpy flattens shape (1, 2) into just (2,). We force it back to 2D.
+                if subject_fixations.ndim == 1 and subject_fixations.size >= 2:
+                    subject_fixations = subject_fixations.reshape(-1, 2)
+                    
+                # 3. PAINT THE MATRIX
+                for fix in subject_fixations:
+                    x, y = int(fix[0]), int(fix[1])
+                    if 0 <= y < 480 and 0 <= x < 640:
+                        fixation_matrix[y, x] = 1.0
+                        
+        # Strategy B: Fallback (in case the mini-dataset already converted them to binary matrices)
+        else:
+            for key, value in mat_data.items():
+                if not key.startswith('__') and isinstance(value, np.ndarray) and value.shape == (480, 640):
+                    fixation_matrix = value
+                    break
+
+        # Convert our pristine binary matrix into a PIL Image for the transform pipeline
+        fixation_map = Image.fromarray((fixation_matrix * 255.0).astype(np.uint8)).convert('L')
         
         # 4. Transform maps to PyTorch Tensors [1, H, W]
         if self.map_transform:
@@ -77,7 +115,7 @@ class FeatureDataset(Dataset):
             fixation_map = transforms.ToTensor()(fixation_map)
             
         # Ensure fixation map is strictly binary (0.0 or 1.0)
-        fixation_map = (fixation_map > 0.5).float()
+        fixation_map = (fixation_map > 0.0).float()
             
         return extracted_features, saliency_map, fixation_map
         
@@ -112,9 +150,47 @@ class LoraDataset(Dataset):
         map_path = os.path.join(self.maps_dir, base_name + '.png')
         saliency_map = Image.open(map_path).convert('L')
         
-        # 3. Load the Discrete Fixation Map (For Evaluation Metrics)
-        fix_path = os.path.join(self.fixations_dir, base_name + '.png')
-        fixation_map = Image.open(fix_path).convert('L')
+        # 3. Load the Discrete Fixation Map (.mat file)
+        fix_path = os.path.join(self.fixations_dir, base_name + '.mat')
+        mat_data = sio.loadmat(fix_path)
+        
+        # We synthesize our own blank ground-truth matrix
+        fixation_matrix = np.zeros((480, 640), dtype=np.float32)
+        
+        # Strategy A: Official SALICON Struct Format (gaze coordinates)
+        if 'gaze' in mat_data:
+            gaze_data = mat_data['gaze']
+            # Loop through each human subject's data
+            for i in range(gaze_data.shape[1]):
+                
+                # Extract the fixations for this subject
+                subject_fixations = gaze_data[0, i]['fixations']
+                
+                # 1. THE UNWRAPPER: If SciPy wrapped it in an object shell, break it open.
+                # If it didn't, this safely ignores it.
+                if subject_fixations.dtype == object and subject_fixations.size == 1:
+                    subject_fixations = subject_fixations[0, 0]
+                    
+                # 2. EDGE CASE: If a subject only made 1 single fixation, 
+                # numpy flattens shape (1, 2) into just (2,). We force it back to 2D.
+                if subject_fixations.ndim == 1 and subject_fixations.size >= 2:
+                    subject_fixations = subject_fixations.reshape(-1, 2)
+                    
+                # 3. PAINT THE MATRIX
+                for fix in subject_fixations:
+                    x, y = int(fix[0]), int(fix[1])
+                    if 0 <= y < 480 and 0 <= x < 640:
+                        fixation_matrix[y, x] = 1.0
+                        
+        # Strategy B: Fallback (in case the mini-dataset already converted them to binary matrices)
+        else:
+            for key, value in mat_data.items():
+                if not key.startswith('__') and isinstance(value, np.ndarray) and value.shape == (480, 640):
+                    fixation_matrix = value
+                    break
+
+        # Convert our pristine binary matrix into a PIL Image for the transform pipeline
+        fixation_map = Image.fromarray((fixation_matrix * 255.0).astype(np.uint8)).convert('L')
         
         # 4. Transform Target Maps
         if self.map_transform:
@@ -125,6 +201,6 @@ class LoraDataset(Dataset):
             fixation_map = transforms.ToTensor()(fixation_map)
             
         # Enforce strict binary values for the evaluation matrix
-        fixation_map = (fixation_map > 0.5).float()
+        fixation_map = (fixation_map > 0.0).float()
             
         return image, saliency_map, fixation_map

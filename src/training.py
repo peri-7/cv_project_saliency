@@ -1,5 +1,8 @@
 import torch
 import torch.nn.functional as F
+from src.metrics import nss, auc_judd, information_gain
+
+
 
 def train_one_epoch(decoder, dataloader, optimizer, criterion, device):
     """
@@ -92,8 +95,88 @@ def evaluate_model(decoder, dataloader, criterion, device):
         loss, _, _, _ = criterion(matched_logits, target_map)
         total_loss_accum += loss.item()
         
-        # NOTE: In your final Jupyter Notebook, you will import the functions 
-        # from metrics.py here to calculate and print the NSS, AUC, and IG scores.
         
     avg_loss = total_loss_accum / len(dataloader)
     return avg_loss
+    
+
+
+@torch.no_grad()
+def test_model(decoder, dataloader, criterion, device, baseline_prob=None):
+    """
+    Tests the model on the test set, computing both continuous losses and discrete metrics.
+    
+    Args:
+        decoder: The neural network decoding head.
+        dataloader: The DataLoader containing the test split.
+        criterion: The UNETRSalCompositeLoss function.
+        device: CPU or CUDA device.
+        baseline_prob (torch.Tensor, optional): The center-bias prior for Information Gain. 
+                                                If None, defaults to a uniform distribution.
+                                                
+    Returns:
+        tuple: (avg_loss, avg_kld, avg_cc, avg_nss, avg_auc, avg_ig)
+    """
+    decoder.eval() # Ensure dropout/batchnorm are strictly locked
+    
+    # 1. Initialize Accumulators
+    total_loss, total_kld, total_cc = 0.0, 0.0, 0.0
+    total_nss, total_auc, total_ig = 0.0, 0.0, 0.0
+    
+    for features, target_map, fixation_map in dataloader:
+        
+        # 2. Move data to device
+        if isinstance(features, dict):
+            features = [f.to(device) for f in features.values()]
+        else:
+            features = [f.to(device) for f in features]
+            
+        target_map = target_map.to(device)
+        fixation_map = fixation_map.to(device) # CRITICAL: Required for metric calculation
+        
+        # 3. Forward pass
+        raw_logits = decoder(features)
+        
+        # 4. Upsample to match ground truth
+        b, c, target_height, target_width = target_map.shape
+        matched_logits = F.interpolate(
+            raw_logits, 
+            size=(target_height, target_width), 
+            mode='bilinear', 
+            align_corners=False
+        )
+        
+        # 5. Compute continuous losses
+        loss, kld, cc, sim = criterion(matched_logits, target_map)
+        total_loss += loss.item()
+        total_kld += kld.item()
+        total_cc += cc.item()
+        
+        # 6. Format predictions for discrete metrics
+        # Information Gain strictly requires a probability distribution summing to 1.0
+        pred_prob = F.softmax(matched_logits.view(b, 1, -1), dim=2).view(b, 1, target_height, target_width)
+        
+        # 7. Configure Information Gain Baseline
+        if baseline_prob is None:
+            # Fallback: Assume uniform probability across all pixels if no prior is provided
+            batch_baseline = torch.ones(b, 1, target_height, target_width).to(device) / (target_height * target_width)
+        else:
+            # Expand the provided prior to match the current batch size
+            batch_baseline = baseline_prob.expand(b, -1, -1, -1).to(device)
+            
+        # 8. Compute discrete spatial metrics
+        total_nss += nss(matched_logits, fixation_map)
+        total_auc += auc_judd(matched_logits, fixation_map)
+        total_ig += information_gain(pred_prob, fixation_map, batch_baseline)
+        
+    # 9. Calculate Final Averages
+    num_batches = len(dataloader)
+    
+    avg_loss = total_loss / num_batches
+    avg_kld = total_kld / num_batches
+    avg_cc = total_cc / num_batches
+    avg_nss = total_nss / num_batches
+    avg_auc = total_auc / num_batches
+    avg_ig = total_ig / num_batches
+
+    return avg_loss, avg_kld, avg_cc, avg_nss, avg_auc, avg_ig

@@ -92,7 +92,7 @@ class SIM_Loss(nn.Module):
 # ---------------------------------------------------------
 # The Composite Optimization Strategy
 # ---------------------------------------------------------
-class UNETRSal_Loss(nn.Module):
+class Composite_Loss(nn.Module):
     """
     The master loss function. It orchestrates the mathematical tug-of-war 
     between statistical alignment and probabilistic smoothness.

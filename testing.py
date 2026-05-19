@@ -11,7 +11,7 @@ from tqdm import tqdm
 from src.dataset import RawDataset, FeatureDataset
 from src.models import ResNet
 from src.decoder import Decoder
-from src.losses import UNETRSal_Loss
+from src.losses import Composite_Loss
 from src.training import train_one_epoch, evaluate_model, test_model
 
 
@@ -48,7 +48,7 @@ def test_phase_1_extraction(device):
                 
                 # Extract the specific item from the batch for each feature map
                 single_feature_dict = {
-                    k: v[i:i+1].cpu() for k, v in features_dict.items()
+                    k: v[i].cpu() for k, v in features_dict.items()
                 }
                 torch.save(single_feature_dict, save_path)
                 
@@ -91,14 +91,14 @@ def test_phase_2_training(device, backbone_channels):
     
     # Initialize the architecture
     decoder = Decoder(in_channels_list=backbone_channels, hidden_dim=128).to(device)
-    criterion = UNETRSal_Loss().to(device)
+    criterion = Composite_Loss().to(device)
     optimizer = optim.AdamW(decoder.parameters(), lr=1e-4, weight_decay=1e-4)
     patience = 0
     val_min = float('inf')
     
     # Run a single epoch to ensure gradients flow and loss converges
     print("Starting training 10 epochs...")
-    epoch_iterator = tqdm(range(10), desc='Training Epochs')
+    epoch_iterator = tqdm(range(4), desc='Training Epochs')
     for epoch in epoch_iterator:   
         train_loss, kld, cc = train_one_epoch(decoder, train_loader, optimizer, criterion, device)
         

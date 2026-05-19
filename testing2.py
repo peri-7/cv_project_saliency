@@ -45,7 +45,7 @@ val_dataset = LoraDataset(
     image_transform=image_transform,
     map_transform=map_transform
 )
-val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False, num_workers=2)
+val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False)
 
 extractor = ResNet().to(device)
 
@@ -54,7 +54,7 @@ decoder = Decoder(in_channels_list=extractor.out_channels, hidden_dim=128).to(de
 criterion = Composite_Loss().to(device)
 #optimizer = optim.AdamW(decoder.parameters(), lr=1e-4, weight_decay=1e-4)
 optimizer = optim.Adam(decoder.parameters(), lr=1e-4)
-epochs = 10
+epochs = 4
 scheduler = lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.01, total_iters=epochs)
 
 # Training Loop with Early Stopping
@@ -69,7 +69,7 @@ for epoch in range(epochs):
     train_loss, kld, cc = train_one_epoch_online(extractor, decoder, train_loader, optimizer, criterion, device)
     val_loss = evaluate_model_online(extractor, decoder, val_loader, criterion, device)
     
-    print(f"Epoch {epoch} | LR: {current_lr:.3e} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
+    print(f"Epoch {epoch+1} | LR: {current_lr:.3e} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
 
     scheduler.step()
     
@@ -82,7 +82,6 @@ for epoch in range(epochs):
         
     if patience > 3: 
         print(f"Early Stopping triggered on Epoch {epoch}. Restoring best weights.")
-        decoder.load_state_dict(torch.load("/kaggle/working/best_resnet_decoder.pth"))
         break   
 
 print("-" * 50)

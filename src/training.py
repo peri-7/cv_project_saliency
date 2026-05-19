@@ -59,6 +59,57 @@ def train_one_epoch(decoder, dataloader, optimizer, criterion, device):
     
     return avg_loss, avg_kld, avg_cc
 
+
+
+def train_one_epoch_online(extractor, decoder, dataloader, optimizer, criterion, device):
+    """
+    Executes an end-to-end pass. 
+    Extractor is frozen (no gradients). Decoder is actively trained.
+    """
+    extractor.eval() # Freeze BatchNorm/Dropout in backbone
+    decoder.train()  # Enable training mode for decoder
+    
+    total_loss_accum, kld_accum, cc_accum = 0.0, 0.0, 0.0
+    
+    for images, target_map, _ in dataloader:
+        
+        images = images.to(device)
+        target_map = target_map.to(device)
+        
+        # 1. ONLINE EXTRACTION (Strictly No Gradients)
+        with torch.no_grad():
+            features_dict = extractor(images)
+            # Convert dictionary of batch tensors to list of batch tensors
+            features = list(features_dict.values())
+        
+        # 2. DECODER OPTIMIZATION
+        optimizer.zero_grad()
+        raw_logits = decoder(features)
+        
+        matched_logits = F.interpolate(
+            raw_logits, 
+            size=(target_map.shape[2], target_map.shape[3]), 
+            mode='bilinear', align_corners=False
+        )
+        
+        loss, loss_kld, loss_cc, _ = criterion(matched_logits, target_map)
+        
+        loss.backward()
+        optimizer.step()
+        
+        total_loss_accum += loss.item()
+        kld_accum += loss_kld.item()
+        cc_accum += loss_cc.item()
+        
+    L = len(dataloader)
+    avg_loss = total_loss_accum / L
+    avg_kld = kld_accum / L
+    avg_cc = cc_accum / L
+    
+    return avg_loss, avg_kld, avg_cc
+
+
+
 @torch.no_grad()
 def evaluate_model(decoder, dataloader, criterion, device):
     """

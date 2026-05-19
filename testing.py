@@ -28,30 +28,30 @@ def test_phase_1_extraction(device):
     ])
     
     extractor = ResNet().to(device)
-
-    for x in ['train', 'test', 'val']:
-        
-        os.makedirs(f"mini_data/features/{x}", exist_ok=True)
-        
-        raw_dataset = RawDataset(image_dir=f"mini_data/images/{x}", transform=image_transform)
-        raw_loader = DataLoader(raw_dataset, batch_size=2, shuffle=False)
-        
-        
-        for batch_idx, (images, filenames) in enumerate(raw_loader):
-            images = images.to(device)
-            features_dict = extractor(images)
+    with torch.no_grad():
+        for x in ['train', 'test', 'val']:
             
-            # Save features individually to disk
-            for i in range(images.size(0)):
-                base_name = os.path.splitext(filenames[i])[0]
-                save_path = f"mini_data/features/{x}/{base_name}.pt"
+            os.makedirs(f"mini_data/features/{x}", exist_ok=True)
+            
+            raw_dataset = RawDataset(image_dir=f"mini_data/images/{x}", transform=image_transform)
+            raw_loader = DataLoader(raw_dataset, batch_size=2, shuffle=False)
+            
+            
+            for batch_idx, (images, filenames) in enumerate(raw_loader):
+                images = images.to(device)
+                features_dict = extractor(images)
                 
-                # Extract the specific item from the batch for each feature map
-                single_feature_dict = {
-                    k: v[i].cpu() for k, v in features_dict.items()
-                }
-                torch.save(single_feature_dict, save_path)
-                
+                # Save features individually to disk
+                for i in range(images.size(0)):
+                    base_name = os.path.splitext(filenames[i])[0]
+                    save_path = f"mini_data/features/{x}/{base_name}.pt"
+                    
+                    # Extract the specific item from the batch for each feature map
+                    single_feature_dict = {
+                        k: v[i].cpu() for k, v in features_dict.items()
+                    }
+                    torch.save(single_feature_dict, save_path)
+                    
     print(f"Extraction complete. Features saved to mini_data/features/")
     
     # Return the out_channels so the decoder knows how to size itself

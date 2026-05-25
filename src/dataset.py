@@ -73,22 +73,23 @@ class FeatureDataset(Dataset):
         # Strategy A: Official SALICON Struct Format (gaze coordinates)
         if 'gaze' in mat_data:
             gaze_data = mat_data['gaze']
-            # Loop through each human subject's data
-            for i in range(gaze_data.shape[1]):
-                
+            # SALICON stores gaze as a (num_subjects, 1) struct array
+            num_subjects = gaze_data.shape[0]
+            for i in range(num_subjects):
+
                 # Extract the fixations for this subject
-                subject_fixations = gaze_data[0, i]['fixations']
-                
+                subject_fixations = gaze_data[i, 0]['fixations']
+
                 # 1. THE UNWRAPPER: If SciPy wrapped it in an object shell, break it open.
                 # If it didn't, this safely ignores it.
                 if subject_fixations.dtype == object and subject_fixations.size == 1:
                     subject_fixations = subject_fixations[0, 0]
-                    
-                # 2. EDGE CASE: If a subject only made 1 single fixation, 
+
+                # 2. EDGE CASE: If a subject only made 1 single fixation,
                 # numpy flattens shape (1, 2) into just (2,). We force it back to 2D.
                 if subject_fixations.ndim == 1 and subject_fixations.size >= 2:
                     subject_fixations = subject_fixations.reshape(-1, 2)
-                    
+
                 # 3. PAINT THE MATRIX
                 for fix in subject_fixations:
                     x, y = int(fix[0]), int(fix[1])
@@ -160,22 +161,23 @@ class LoraDataset(Dataset):
         # Strategy A: Official SALICON Struct Format (gaze coordinates)
         if 'gaze' in mat_data:
             gaze_data = mat_data['gaze']
-            # Loop through each human subject's data
-            for i in range(gaze_data.shape[1]):
-                
+            # SALICON stores gaze as a (num_subjects, 1) struct array
+            num_subjects = gaze_data.shape[0]
+            for i in range(num_subjects):
+
                 # Extract the fixations for this subject
-                subject_fixations = gaze_data[0, i]['fixations']
-                
+                subject_fixations = gaze_data[i, 0]['fixations']
+
                 # 1. THE UNWRAPPER: If SciPy wrapped it in an object shell, break it open.
                 # If it didn't, this safely ignores it.
                 if subject_fixations.dtype == object and subject_fixations.size == 1:
                     subject_fixations = subject_fixations[0, 0]
-                    
-                # 2. EDGE CASE: If a subject only made 1 single fixation, 
+
+                # 2. EDGE CASE: If a subject only made 1 single fixation,
                 # numpy flattens shape (1, 2) into just (2,). We force it back to 2D.
                 if subject_fixations.ndim == 1 and subject_fixations.size >= 2:
                     subject_fixations = subject_fixations.reshape(-1, 2)
-                    
+
                 # 3. PAINT THE MATRIX
                 for fix in subject_fixations:
                     x, y = int(fix[0]), int(fix[1])

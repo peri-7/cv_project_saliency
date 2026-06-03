@@ -6,7 +6,7 @@ import os
 import torch
 
 # 2. Append the cloned repository folder to Python's path
-sys.path.append('/kaggle/working/resnet_salicon/')
+sys.path.append('/kaggle/working/cv_project_saliency/')
 
 # 3. Verify hardware acceleration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

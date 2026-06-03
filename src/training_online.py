@@ -103,36 +103,37 @@ def test_model_online(extractor, decoder, dataloader, criterion, device, baselin
     extractor.eval()
     decoder.eval()
     
-    total_loss, total_kld, total_cc = 0.0, 0.0, 0.0
+    total_loss, total_kld, total_cc, total_sim = 0.0, 0.0, 0.0, 0.0
     total_nss, total_auc, total_ig = 0.0, 0.0, 0.0
-    
+
     for images, target_map, fixation_map in dataloader:
-        
+
         images = images.to(device)
         target_map = target_map.to(device)
         fixation_map = fixation_map.to(device)
-        
+
         # 1. Extract Features
         features_dict = extractor(images)
         features = list(features_dict.values())
-        
+
         # 2. Decode
         raw_logits = decoder(features)
-        
+
         # 3. Upsample
         b, c, target_height, target_width = target_map.shape
         matched_logits = F.interpolate(
-            raw_logits, 
-            size=(target_height, target_width), 
-            mode='bilinear', 
+            raw_logits,
+            size=(target_height, target_width),
+            mode='bilinear',
             align_corners=False
         )
-        
+
         # 4. Continuous Metrics
         loss, kld, cc, sim = criterion(matched_logits, target_map)
         total_loss += loss.item()
         total_kld += kld.item()
         total_cc += cc.item()
+        total_sim += sim.item()
         
         # 5. Discrete Metrics formatting
         pred_prob = F.softmax(matched_logits.view(b, 1, -1), dim=2).view(b, 1, target_height, target_width)
@@ -153,8 +154,9 @@ def test_model_online(extractor, decoder, dataloader, criterion, device, baselin
     avg_loss = total_loss / num_batches
     avg_kld = total_kld / num_batches
     avg_cc = total_cc / num_batches
+    avg_sim = total_sim / num_batches
     avg_nss = total_nss / num_batches
     avg_auc = total_auc / num_batches
     avg_ig = total_ig / num_batches
 
-    return avg_loss, avg_kld, avg_cc, avg_nss, avg_auc, avg_ig
+    return avg_loss, avg_kld, avg_cc, avg_sim, avg_nss, avg_auc, avg_ig

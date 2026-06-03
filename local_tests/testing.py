@@ -127,9 +127,9 @@ def test_phase_2_training(device, backbone_channels):
     )
     # Use a small batch size for testing
     test_loader = DataLoader(test_dataset, batch_size=2, shuffle=False)
-    avg_loss, avg_kld, avg_cc, avg_nss, avg_auc, avg_ig = test_model(decoder, test_loader, criterion, device)
+    avg_loss, avg_kld, avg_cc, avg_sim, avg_nss, avg_auc, avg_ig = test_model(decoder, test_loader, criterion, device)
     print(f'''
-    Test Loss: {avg_loss}, KLD: {avg_kld}, CC: {avg_cc}
+    Test Loss: {avg_loss}, KLD: {avg_kld}, CC: {avg_cc}, SIM: {avg_sim}
     NSS: {avg_nss}, AUC: {avg_auc}, IG: {avg_ig}
     ''')
     

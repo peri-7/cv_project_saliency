@@ -12,7 +12,8 @@ print("\n=== gaze array ===")
 print("shape:", g.shape)
 print("dtype:", g.dtype)
 print("field names:", g.dtype.names)
-print("num subjects:", g.shape[1])
+# SALICON stores gaze as (num_subjects, 1) — subjects are on axis 0
+print("num subjects:", g.shape[0])
 
 print("\n=== subject 0 ===")
 s0 = g[0, 0]
@@ -28,8 +29,8 @@ print(fix[:5])
 print("min:", fix.min(axis=0) if fix.size else None, "max:", fix.max(axis=0) if fix.size else None)
 
 print("\n=== all subjects: fixation counts ===")
-for i in range(g.shape[1]):
-    f = g[0, i]['fixations']
+for i in range(g.shape[0]):
+    f = g[i, 0]['fixations']
     if f.dtype == object and f.size == 1:
         f = f[0, 0]
     print(f"  subject {i}: shape={f.shape}, dtype={f.dtype}")

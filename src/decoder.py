@@ -11,7 +11,12 @@ class Decoder(nn.Module):
         super().__init__()
         
         total_in_channels = sum(in_channels_list)
-        
+
+        # GroupNorm needs hidden_dim divisible by num_groups. Prefer 32 groups,
+        # but fall back to the largest divisor <= 32 so any hidden_dim (e.g. for a
+        # different backbone) constructs without crashing. Always >= 1.
+        num_groups = max(g for g in range(1, 33) if hidden_dim % g == 0)
+
         # 1. Dimensionality Reduction
         self.channel_compression = nn.Conv2d(
             in_channels=total_in_channels, 
@@ -22,7 +27,7 @@ class Decoder(nn.Module):
         
         # GroupNorm splits the channels into groups (typically 32) to compute stats.
         # It is strictly superior to BatchNorm for batch sizes < 16.
-        self.norm1 = nn.GroupNorm(num_groups=32, num_channels=hidden_dim)
+        self.norm1 = nn.GroupNorm(num_groups=num_groups, num_channels=hidden_dim)
         
         # 2. Spatial Smoothing
         self.spatial_conv = nn.Conv2d(
@@ -33,7 +38,7 @@ class Decoder(nn.Module):
             bias=False
         )
         
-        self.norm2 = nn.GroupNorm(num_groups=32, num_channels=hidden_dim)
+        self.norm2 = nn.GroupNorm(num_groups=num_groups, num_channels=hidden_dim)
         self.activation = nn.ReLU(inplace=True)
         
         # 3. Logit Projection

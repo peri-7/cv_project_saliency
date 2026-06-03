@@ -91,12 +91,13 @@ print("Training complete.")
 print("--- Phase 3: Final Evaluation ---")
 
 # Run the strict metric calculation on the validation proxy set
-avg_loss, avg_kld, avg_cc, avg_nss, avg_auc, avg_ig = test_model_online(extractor, decoder, val_loader, criterion, device)
+avg_loss, avg_kld, avg_cc, avg_sim, avg_nss, avg_auc, avg_ig = test_model_online(extractor, decoder, val_loader, criterion, device)
 
 print(f"Final Model Benchmark (ResNet-50 Backbone):")
 print(f"Composite Loss: {avg_loss:.4f}")
 print(f"KLD: {avg_kld:.4f}")
 print(f"CC:  {avg_cc:.4f}")
+print(f"SIM: {avg_sim:.4f}")
 print(f"NSS: {avg_nss:.4f}")
 print(f"AUC: {avg_auc:.4f}")
 print(f"IG:  {avg_ig:.4f} bits")

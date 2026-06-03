@@ -61,6 +61,7 @@ def train_one_epoch(decoder, dataloader, optimizer, criterion, device):
 
 
 
+@torch.no_grad()
 def evaluate_model(decoder, dataloader, criterion, device):
     """
     Evaluates the model on the validation/test set.
@@ -116,12 +117,12 @@ def test_model(decoder, dataloader, criterion, device, baseline_prob=None):
                                                 If None, defaults to a uniform distribution.
                                                 
     Returns:
-        tuple: (avg_loss, avg_kld, avg_cc, avg_nss, avg_auc, avg_ig)
+        tuple: (avg_loss, avg_kld, avg_cc, avg_sim, avg_nss, avg_auc, avg_ig)
     """
     decoder.eval() # Ensure dropout/batchnorm are strictly locked
-    
+
     # 1. Initialize Accumulators
-    total_loss, total_kld, total_cc = 0.0, 0.0, 0.0
+    total_loss, total_kld, total_cc, total_sim = 0.0, 0.0, 0.0, 0.0
     total_nss, total_auc, total_ig = 0.0, 0.0, 0.0
     
     for features, target_map, fixation_map in dataloader:
@@ -152,7 +153,8 @@ def test_model(decoder, dataloader, criterion, device, baseline_prob=None):
         total_loss += loss.item()
         total_kld += kld.item()
         total_cc += cc.item()
-        
+        total_sim += sim.item()
+
         # 6. Format predictions for discrete metrics
         # Information Gain strictly requires a probability distribution summing to 1.0
         pred_prob = F.softmax(matched_logits.view(b, 1, -1), dim=2).view(b, 1, target_height, target_width)
@@ -176,8 +178,9 @@ def test_model(decoder, dataloader, criterion, device, baseline_prob=None):
     avg_loss = total_loss / num_batches
     avg_kld = total_kld / num_batches
     avg_cc = total_cc / num_batches
+    avg_sim = total_sim / num_batches
     avg_nss = total_nss / num_batches
     avg_auc = total_auc / num_batches
     avg_ig = total_ig / num_batches
 
-    return avg_loss, avg_kld, avg_cc, avg_nss, avg_auc, avg_ig
+    return avg_loss, avg_kld, avg_cc, avg_sim, avg_nss, avg_auc, avg_ig

@@ -1,5 +1,5 @@
 # 1. Clone your repository directly into the Kaggle working directory
-!git clone https://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@github.com/peri-7/cv_project_saliency.git
+!git clone https://github.com/peri-7/cv_project_saliency.git
 
 import sys
 import os

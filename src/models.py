@@ -312,3 +312,105 @@ class MaeViT(nn.Module):
         someone calls model.train() in the notebook (see the ResNet override).
         """
         return super().train(False)
+
+
+class ClipViT(nn.Module):
+    """
+    A frozen CLIP ViT-B/16 image encoder (OpenAI's original weights), exposed
+    through the exact same multi-scale contract as all other backbones.
+
+    CLIP was pretrained via *contrastive image–text learning* on 400M
+    image–caption pairs from the internet.  It learned to align visual and
+    textual semantics, so its features are strongly biased toward objects and
+    concepts that humans naturally describe in language — which may correlate
+    with where humans look (saliency).
+
+    Architecturally this is a standard (vanilla) ViT-B/16 — identical structure
+    to MaeViT — so the forward path is the same: drop CLS token, reshape patch
+    tokens to a spatial grid, permute to channels-first.  Only the pretrained
+    weights differ.
+    """
+
+    def __init__(self,
+                 model_name='vit_base_patch16_clip_224.openai',
+                 tap_blocks=None):
+        super().__init__()
+
+        try:
+            import timm
+        except ImportError as e:
+            raise ImportError(
+                "ClipViT requires `timm` (pip install timm). It is preinstalled "
+                "on Kaggle; install it locally for smoke tests."
+            ) from e
+
+        # 1. Load the CLIP-pretrained ViT-B/16 image encoder.
+        #    Native resolution is 224×224; dynamic_img_size=True lets timm
+        #    interpolate position embeddings to our 480×640 input at runtime.
+        base_model = timm.create_model(
+            model_name,
+            pretrained=True,
+            num_classes=0,
+            dynamic_img_size=True,
+        )
+
+        # 2. Freeze every parameter.
+        for param in base_model.parameters():
+            param.requires_grad = False
+        base_model.eval()
+        self.backbone = base_model
+
+        # 3. Store patch size for token→grid reshape (16, 16).
+        self.patch_size = base_model.patch_embed.patch_size
+
+        # 4. Four evenly-spaced tap depths (blocks 2, 5, 8, 11 for ViT-B/12).
+        num_blocks = len(base_model.blocks)
+        if tap_blocks is None:
+            tap_blocks = [
+                num_blocks // 4 - 1,
+                num_blocks // 2 - 1,
+                (3 * num_blocks) // 4 - 1,
+                num_blocks - 1,
+            ]
+        self.tap_blocks = tap_blocks
+
+        # 5. out_channels: [768, 768, 768, 768] for ViT-B.
+        embed_dim = base_model.embed_dim
+        self.out_channels = [embed_dim] * len(tap_blocks)
+
+        # 6. Forward hooks to capture intermediate block outputs.
+        self._features = {}
+        for slot, block_idx in enumerate(tap_blocks):
+            base_model.blocks[block_idx].register_forward_hook(self._make_hook(slot))
+
+    def _make_hook(self, slot):
+        def hook(module, inputs, output):
+            self._features[slot] = output
+        return hook
+
+    def forward(self, x):
+        """
+        Args:
+            x (torch.Tensor): [B, 3, H, W], ImageNet-normalized.
+        Returns:
+            dict: four [B, 768, H/16, W/16] feature tensors.
+        """
+        self._features = {}
+        B, _, H, W = x.shape
+        H_p = H // self.patch_size[0]
+        W_p = W // self.patch_size[1]
+
+        with torch.no_grad():
+            self.backbone.forward_features(x)
+
+        features = {}
+        for slot, block_idx in enumerate(self.tap_blocks):
+            feat = self._features[slot]                        # [B, 1+N, C]
+            feat = feat[:, 1:, :]                              # Drop CLS
+            feat = feat.reshape(B, H_p, W_p, -1)              # → [B, H_p, W_p, C]
+            feat = feat.permute(0, 3, 1, 2).contiguous()      # → [B, C, H_p, W_p]
+            features[f'clip_block{block_idx}'] = feat
+        return features
+
+    def train(self, mode=True):
+        return super().train(False)

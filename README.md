@@ -21,7 +21,7 @@ in for reference (it is not ViT-B, so it sits outside the param-matched family).
 | ViT-B         | ImageNet supervised          | ⬜ planned                           |
 | DINOv2 ViT-B  | self-distillation            | ⬜ planned                           |
 | MAE ViT-B     | masked autoencoding          | ✅ implemented — `MaeViT`            |
-| CLIP ViT-B    | image–text contrastive       | ⬜ planned                           |
+| CLIP ViT-B    | image–text contrastive       | ✅ implemented — `ClipViT`           |
 
 Every backbone follows one contract so the shared decoder consumes it unchanged:
 **freeze all params, lock `eval()`, return a dict of multi-scale feature tensors, and

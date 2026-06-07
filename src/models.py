@@ -223,14 +223,15 @@ class MaeViT(nn.Module):
 
         # 1. Load the MAE-pretrained ViT-B encoder.
         #    num_classes=0 drops the classification head.
-        #    Unlike SAM (native 1024×1024), MAE's native resolution is 224×224,
-        #    but timm automatically interpolates the absolute position embeddings
-        #    to match any input size at runtime (forward_features →
-        #    _pos_embed → resample_abs_pos_embed), so 480×640 just works.
+        #    Unlike SAM (native 1024×1024), MAE's native resolution is 224×224.
+        #    By passing `dynamic_img_size=True`, timm will automatically interpolate
+        #    the absolute position embeddings to match any input size (like 480×640)
+        #    at runtime, preventing patch_embed shape assertion errors.
         base_model = timm.create_model(
             model_name,
             pretrained=True,
             num_classes=0,
+            dynamic_img_size=True
         )
 
         # 2. Freeze every parameter (same rationale as ResNet and SAM:

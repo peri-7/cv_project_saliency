@@ -6,25 +6,19 @@ import torchvision.transforms as transforms
 from tqdm import tqdm
 
 from src.dataset import LoraDataset
-from src.models import ResNet
+from src.models import ViT
 from src.decoder import Decoder
 from src.losses import Composite_Loss
 from src.training_online import train_one_epoch_online, evaluate_model_online, test_model_online
 
-if torch.cuda.is_available():
-    device = "cuda"
-    val_batch_size = 2
-    import os
-    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-else:
-    device = "cpu"
-    val_batch_sizen = 16
+print("---  Phase 1+2: Model Inference + Decoder Training (ViT-B) ---")
 
-print("---  Phase 1+2: Model Inference + Decoder Training ---")
-
+# Same transforms as the ResNet smoke test: input normalization is held fixed
+# across backbones for benchmark fairness (see README.md).
 image_transform = transforms.Compose([
-    transforms.Resize((480, 640)), 
+    transforms.Resize((480, 640)),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
@@ -43,7 +37,7 @@ train_dataset = LoraDataset(
     image_transform=image_transform,
     map_transform=map_transform
 )
-# Use a small batch size for testing
+# Use a small batch size for testing (ViT-B is heavy, especially on CPU)
 train_loader = DataLoader(train_dataset, batch_size=2, shuffle=True)
 
 val_dataset = LoraDataset(
@@ -53,11 +47,13 @@ val_dataset = LoraDataset(
     image_transform=image_transform,
     map_transform=map_transform
 )
-val_loader = DataLoader(val_dataset, batch_size=val_batch_size, shuffle=False)
+val_loader = DataLoader(val_dataset, batch_size=2, shuffle=False)
 
-extractor = ResNet().to(device)
+# Swap ResNet -> ViT; everything downstream is backbone-agnostic.
+extractor = ViT().to(device)
 
-# Architecture Initialization
+# Architecture Initialization. hidden_dim is held at 128 (same as the ResNet run)
+# so the decoder config is identical across backbones.
 decoder = Decoder(in_channels_list=extractor.out_channels, hidden_dim=128).to(device)
 criterion = Composite_Loss().to(device)
 #optimizer = optim.AdamW(decoder.parameters(), lr=1e-4, weight_decay=1e-4)
@@ -70,27 +66,27 @@ patience = 0
 val_min = float('inf')
 
 print('start training')
-for epoch in range(epochs):   
-    
+for epoch in range(epochs):
+
     current_lr = scheduler.get_last_lr()[0]
-    
+
     train_loss, kld, cc = train_one_epoch_online(extractor, decoder, train_loader, optimizer, criterion, device)
     val_loss = evaluate_model_online(extractor, decoder, val_loader, criterion, device)
-    
+
     print(f"Epoch {epoch+1} | LR: {current_lr:.3e} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
 
     scheduler.step()
-    
-    # Save the absolute best weights to the hard drive
+
+    # Track the best validation loss
     if val_loss < val_min:
         patience = 0
         val_min = val_loss
     else:
         patience += 1
-        
-    if patience > 3: 
+
+    if patience > 3:
         print(f"Early Stopping triggered on Epoch {epoch}. Restoring best weights.")
-        break   
+        break
 
 print("-" * 50)
 print("Training complete.")
@@ -101,7 +97,7 @@ print("--- Phase 3: Final Evaluation ---")
 # Run the strict metric calculation on the validation proxy set
 avg_loss, avg_kld, avg_cc, avg_sim, avg_nss, avg_auc, avg_ig = test_model_online(extractor, decoder, val_loader, criterion, device)
 
-print(f"Final Model Benchmark (ResNet-50 Backbone):")
+print(f"Final Model Benchmark (ViT-B Backbone):")
 print(f"Composite Loss: {avg_loss:.4f}")
 print(f"KLD: {avg_kld:.4f}")
 print(f"CC:  {avg_cc:.4f}")

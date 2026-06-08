@@ -1,0 +1,17 @@
+---  Phase 1+2: Model Inference + Decoder Training ---
+start training
+Epoch 1 | LR: 1.000e-04 | Train Loss: 5.8393 | Val Loss: 3.6449
+Epoch 2 | LR: 7.525e-05 | Train Loss: 2.6226 | Val Loss: 3.1854
+Epoch 3 | LR: 5.050e-05 | Train Loss: 2.0194 | Val Loss: 3.2453
+Epoch 4 | LR: 2.575e-05 | Train Loss: 1.6612 | Val Loss: 3.1661
+--------------------------------------------------
+Training complete.
+--- Phase 3: Final Evaluation ---
+Final Model Benchmark (ResNet-50 Backbone):
+Composite Loss: 3.1661
+KLD: 0.4461
+CC:  0.6445
+SIM: 0.6509
+NSS: 1.2670
+AUC: 0.8349
+IG:  1.2761 bits

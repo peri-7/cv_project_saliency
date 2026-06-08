@@ -414,3 +414,95 @@ class ClipViT(nn.Module):
 
     def train(self, mode=True):
         return super().train(False)
+
+
+class ViT(nn.Module):
+    """
+    A frozen ViT-B/16 backbone for multi-scale feature extraction.
+    Follows the same contract as ResNet and SamViT:
+    frozen params, locked eval(), dict of feature tensors, out_channels list.
+
+    KEY DIFFERENCE FROM SAMVIT: Plain ViT is a token-sequence model [B, 1+N, C]
+    with a CLS token. We drop the CLS token and reshape the remaining N patches
+    into a spatial grid [B, C, H/16, W/16].
+    """
+
+    def __init__(self,
+                 model_name='vit_base_patch16_224',
+                 tap_blocks=None):
+        super().__init__()
+
+        try:
+            import timm
+        except ImportError as e:
+            raise ImportError(
+                "ViT requires `timm` (pip install timm). It is preinstalled "
+                "on Kaggle; install it locally for smoke tests."
+            ) from e
+
+        # 1. Load the pretrained ViT encoder. num_classes=0 drops the classification head.
+        base_model = timm.create_model(
+            model_name,
+            pretrained=True,
+            num_classes=0,
+            img_size=(480, 640)
+        )
+
+        # 2. Freeze all parameters and lock eval mode.
+        for param in base_model.parameters():
+            param.requires_grad = False
+        base_model.eval()
+        self.backbone = base_model
+
+        # 3. Choose four tap depths spread across the block stack (low -> high level).
+        #    For ViT-B's 12 blocks this is blocks 2, 5, 8, 11 (0-indexed).
+        num_blocks = len(base_model.blocks)
+        if tap_blocks is None:
+            tap_blocks = [
+                num_blocks // 4 - 1,
+                num_blocks // 2 - 1,
+                (3 * num_blocks) // 4 - 1,
+                num_blocks - 1,
+            ]
+        self.tap_blocks = tap_blocks
+
+        # 4. Every tap is the plain-ViT embedding width (768 for ViT-B).
+        embed_dim = base_model.embed_dim
+        self.out_channels = [embed_dim] * len(tap_blocks)
+
+        # 5. Register forward hooks to capture each tapped block's output.
+        self._features = {}
+        for slot, block_idx in enumerate(tap_blocks):
+            base_model.blocks[block_idx].register_forward_hook(self._make_hook(slot))
+
+    def _make_hook(self, slot):
+        def hook(module, inputs, output):
+            self._features[slot] = output
+        return hook
+
+    def forward(self, x):
+        """
+        Args:
+            x (torch.Tensor): [B, 3, H, W], ImageNet-normalized.
+        Returns:
+            dict: four [B, embed_dim, H/16, W/16] feature tensors, shallow -> deep.
+        """
+        self._features = {}
+        with torch.no_grad():
+            self.backbone.forward_features(x)
+
+        features = {}
+        for slot, block_idx in enumerate(self.tap_blocks):
+            feat = self._features[slot]       # [B, 1+N, C] — includes CLS token
+            feat = feat[:, 1:, :]             # drop CLS → [B, N, C]
+            B, N, C = feat.shape
+            H, W = x.shape[2] // 16, x.shape[3] // 16
+            feat = feat.reshape(B, H, W, C)   # → [B, H/16, W/16, C]
+            feat = feat.permute(0, 3, 1, 2).contiguous()  # → [B, C, H/16, W/16]
+            features[f'vit_block{block_idx}'] = feat
+
+        return features
+
+    def train(self, mode=True):
+        """Safety lock: keep the frozen backbone permanently in eval mode."""
+        return super().train(False)

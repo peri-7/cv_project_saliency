@@ -17,8 +17,8 @@ in for reference (it is not ViT-B, so it sits outside the param-matched family).
 | Backbone      | Pretraining objective        | Status                              |
 |---------------|------------------------------|-------------------------------------|
 | ResNet-50     | ImageNet supervised          | ✅ implemented — `ResNet` (baseline) |
+| ViT-B         | ImageNet supervised          | ✅ implemented — `ViT`    (baseline) |
 | SAM ViT-B     | Segment Anything (SA-1B)     | ✅ implemented — `SamViT`            |
-| ViT-B         | ImageNet supervised          | ⬜ planned                           |
 | DINOv2 ViT-B  | self-distillation            | ⬜ planned                           |
 | MAE ViT-B     | masked autoencoding          | ✅ implemented — `MaeViT`            |
 | CLIP ViT-B    | image–text contrastive       | ✅ implemented — `ClipViT`           |

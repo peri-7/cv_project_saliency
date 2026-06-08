@@ -7,7 +7,7 @@ class Decoder(nn.Module):
     A lightweight, multi-scale convolutional decoding head utilizing 
     Group Normalization for stability under low-batch-memory constraints.
     """
-    def __init__(self, in_channels_list, hidden_dim=256):
+    def __init__(self, in_channels_list, hidden_dim=512):
         super().__init__()
         
         total_in_channels = sum(in_channels_list)

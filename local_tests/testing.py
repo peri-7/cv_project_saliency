@@ -116,7 +116,7 @@ def test_phase_2_training(device, backbone_channels):
             break   
         
     print('-'*50)
-    print("Traing ended succesfully")
+    print("Training ended succesfully")
     
     # we use the validation set because test set misses the maps
     test_dataset = FeatureDataset(

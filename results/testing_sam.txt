@@ -1,0 +1,18 @@
+---  Phase 1+2: Model Inference + Decoder Training (SAM ViT-B) ---
+model.safetensors: 100%|██████████████████████████████████████████████████████████| 359M/359M [00:15<00:00, 23.2MB/s]
+start training
+Epoch 1 | LR: 1.000e-04 | Train Loss: 3.9601 | Val Loss: 2.0200
+Epoch 2 | LR: 7.525e-05 | Train Loss: 1.8710 | Val Loss: 1.8242
+Epoch 3 | LR: 5.050e-05 | Train Loss: 1.4552 | Val Loss: 1.7529
+Epoch 4 | LR: 2.575e-05 | Train Loss: 1.1947 | Val Loss: 1.7630
+--------------------------------------------------
+Training complete.
+--- Phase 3: Final Evaluation ---
+Final Model Benchmark (SAM ViT-B Backbone):
+Composite Loss: 1.7630
+KLD: 0.3169
+CC:  0.6913
+SIM: 0.7142
+NSS: 1.3384
+AUC: 0.8583
+IG:  1.4856 bits

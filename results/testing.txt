@@ -1,0 +1,13 @@
+Testing on hardware: cuda
+
+--- Starting Phase 1: Feature Extraction ---
+Extraction complete. Features saved to mini_data/features/
+
+--- Starting Phase 2: Decoder Training ---
+Starting training 10 epochs...
+Training Epochs: 100%|█████████████████████████████| 4/4 [00:22<00:00,  5.70s/it, Train Loss=1.5699, Val Loss=2.9138]
+--------------------------------------------------
+Traing ended succesfully
+
+    Test Loss: 2.913770971298218, KLD: 0.420667484998703, CC: 0.6282194876670837, SIM: 0.6646844267845153
+    NSS: 1.2283111667633058, AUC: 0.8351354703301344, IG: 1.3020820474624635

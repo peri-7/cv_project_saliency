@@ -181,6 +181,241 @@ class SamViT(nn.Module):
         return super().train(False)
 
 
+class MaeViT(nn.Module):
+    """
+    A frozen MAE (Masked Autoencoder) ViT-B image encoder, exposed through the
+    exact same multi-scale contract as `ResNet` and `SamViT`: frozen params,
+    locked eval() mode, a dict of feature tensors, and an `out_channels` list.
+
+    MAE was pretrained via self-supervised masked autoencoding on ImageNet: 75%
+    of patches are masked and the encoder learns to produce representations that
+    let the decoder reconstruct the missing pixels. This forces the encoder to
+    understand spatial structure and semantics without any labels.
+
+    KEY DIFFERENCE FROM SAM: MAE uses a *standard* (vanilla) ViT with a CLS
+    token. Each block outputs a token sequence [B, 1+N, C] where the first
+    token is CLS and the remaining N tokens are the patch embeddings laid out
+    in raster order. To produce the spatial [B, C, H, W] feature maps the
+    decoder expects, we:
+      1. Drop the CLS token  →  [B, N, C]
+      2. Reshape to grid     →  [B, H_p, W_p, C]
+      3. Permute to BCHW     →  [B, C, H_p, W_p]
+
+    SAM's encoder, by contrast, uses windowed attention and keeps features as
+    spatial [B, H, W, C] with no CLS token, so SamViT only needs a permute.
+
+    This CLS-drop + reshape pattern will be shared by all future standard-ViT
+    backbones (supervised ViT-B, CLIP ViT-B).
+    """
+
+    def __init__(self,
+                 model_name='vit_base_patch16_224.mae',
+                 tap_blocks=None):
+        super().__init__()
+
+        try:
+            import timm
+        except ImportError as e:
+            raise ImportError(
+                "MaeViT requires `timm` (pip install timm). It is preinstalled "
+                "on Kaggle; install it locally for smoke tests."
+            ) from e
+
+        # 1. Load the MAE-pretrained ViT-B encoder.
+        #    num_classes=0 drops the classification head.
+        #    Unlike SAM (native 1024×1024), MAE's native resolution is 224×224.
+        #    By passing `dynamic_img_size=True`, timm will automatically interpolate
+        #    the absolute position embeddings to match any input size (like 480×640)
+        #    at runtime, preventing patch_embed shape assertion errors.
+        base_model = timm.create_model(
+            model_name,
+            pretrained=True,
+            num_classes=0,
+            dynamic_img_size=True
+        )
+
+        # 2. Freeze every parameter (same rationale as ResNet and SAM:
+        #    preserve the pretrained features; only the decoder ever trains).
+        for param in base_model.parameters():
+            param.requires_grad = False
+        base_model.eval()
+        self.backbone = base_model
+
+        # 3. Store the patch size for the token→grid reshape in forward().
+        #    For ViT-B patch16 this is (16, 16).
+        self.patch_size = base_model.patch_embed.patch_size
+
+        # 4. Choose four tap depths spread across the block stack (low → high).
+        #    For ViT-B's 12 blocks: blocks 2, 5, 8, 11 (0-indexed).
+        #    This is the SAME tap contract as SamViT for structural fairness.
+        num_blocks = len(base_model.blocks)
+        if tap_blocks is None:
+            tap_blocks = [
+                num_blocks // 4 - 1,
+                num_blocks // 2 - 1,
+                (3 * num_blocks) // 4 - 1,
+                num_blocks - 1,
+            ]
+        self.tap_blocks = tap_blocks
+
+        # 5. Every tap is the plain-ViT embedding width (768 for ViT-B).
+        embed_dim = base_model.embed_dim
+        self.out_channels = [embed_dim] * len(tap_blocks)
+
+        # 6. Register forward hooks that stash each tapped block's output.
+        self._features = {}
+        for slot, block_idx in enumerate(tap_blocks):
+            base_model.blocks[block_idx].register_forward_hook(self._make_hook(slot))
+
+    def _make_hook(self, slot):
+        def hook(module, inputs, output):
+            self._features[slot] = output
+        return hook
+
+    def forward(self, x):
+        """
+        Args:
+            x (torch.Tensor): A batch of RGB images, shape [B, 3, H, W],
+                              ImageNet-normalized (same normalization as all
+                              other backbones, held fixed for benchmark fairness).
+        Returns:
+            dict: four [B, embed_dim, H/16, W/16] feature tensors, ordered
+                  shallow → deep, matching the ResNet/SamViT output contract.
+        """
+        self._features = {}
+        B, _, H, W = x.shape
+
+        # Calculate the spatial grid dimensions from input size and patch size.
+        H_p = H // self.patch_size[0]   # 480 // 16 = 30
+        W_p = W // self.patch_size[1]   # 640 // 16 = 40
+
+        # Failsafe no_grad (mirrors ResNet/SamViT).
+        with torch.no_grad():
+            self.backbone.forward_features(x)
+
+        # Each hooked block output has shape [B, 1+N, C] where:
+        #   1   = CLS token (global, non-spatial — we discard it)
+        #   N   = H_p * W_p = number of patch tokens
+        #   C   = embed_dim (768)
+        features = {}
+        for slot, block_idx in enumerate(self.tap_blocks):
+            feat = self._features[slot]         # [B, 1+N, C]
+            feat = feat[:, 1:, :]               # Drop CLS → [B, N, C]
+            feat = feat.reshape(B, H_p, W_p, -1)  # → [B, H_p, W_p, C]
+            feat = feat.permute(0, 3, 1, 2).contiguous()  # → [B, C, H_p, W_p]
+            features[f'mae_block{block_idx}'] = feat
+        return features
+
+    def train(self, mode=True):
+        """
+        Safety lock: keep the frozen backbone permanently in eval mode, even if
+        someone calls model.train() in the notebook (see the ResNet override).
+        """
+        return super().train(False)
+
+
+class ClipViT(nn.Module):
+    """
+    A frozen CLIP ViT-B/16 image encoder (OpenAI's original weights), exposed
+    through the exact same multi-scale contract as all other backbones.
+
+    CLIP was pretrained via *contrastive image–text learning* on 400M
+    image–caption pairs from the internet.  It learned to align visual and
+    textual semantics, so its features are strongly biased toward objects and
+    concepts that humans naturally describe in language — which may correlate
+    with where humans look (saliency).
+
+    Architecturally this is a standard (vanilla) ViT-B/16 — identical structure
+    to MaeViT — so the forward path is the same: drop CLS token, reshape patch
+    tokens to a spatial grid, permute to channels-first.  Only the pretrained
+    weights differ.
+    """
+
+    def __init__(self,
+                 model_name='vit_base_patch16_clip_224.openai',
+                 tap_blocks=None):
+        super().__init__()
+
+        try:
+            import timm
+        except ImportError as e:
+            raise ImportError(
+                "ClipViT requires `timm` (pip install timm). It is preinstalled "
+                "on Kaggle; install it locally for smoke tests."
+            ) from e
+
+        # 1. Load the CLIP-pretrained ViT-B/16 image encoder.
+        #    Native resolution is 224×224; dynamic_img_size=True lets timm
+        #    interpolate position embeddings to our 480×640 input at runtime.
+        base_model = timm.create_model(
+            model_name,
+            pretrained=True,
+            num_classes=0,
+            dynamic_img_size=True,
+        )
+
+        # 2. Freeze every parameter.
+        for param in base_model.parameters():
+            param.requires_grad = False
+        base_model.eval()
+        self.backbone = base_model
+
+        # 3. Store patch size for token→grid reshape (16, 16).
+        self.patch_size = base_model.patch_embed.patch_size
+
+        # 4. Four evenly-spaced tap depths (blocks 2, 5, 8, 11 for ViT-B/12).
+        num_blocks = len(base_model.blocks)
+        if tap_blocks is None:
+            tap_blocks = [
+                num_blocks // 4 - 1,
+                num_blocks // 2 - 1,
+                (3 * num_blocks) // 4 - 1,
+                num_blocks - 1,
+            ]
+        self.tap_blocks = tap_blocks
+
+        # 5. out_channels: [768, 768, 768, 768] for ViT-B.
+        embed_dim = base_model.embed_dim
+        self.out_channels = [embed_dim] * len(tap_blocks)
+
+        # 6. Forward hooks to capture intermediate block outputs.
+        self._features = {}
+        for slot, block_idx in enumerate(tap_blocks):
+            base_model.blocks[block_idx].register_forward_hook(self._make_hook(slot))
+
+    def _make_hook(self, slot):
+        def hook(module, inputs, output):
+            self._features[slot] = output
+        return hook
+
+    def forward(self, x):
+        """
+        Args:
+            x (torch.Tensor): [B, 3, H, W], ImageNet-normalized.
+        Returns:
+            dict: four [B, 768, H/16, W/16] feature tensors.
+        """
+        self._features = {}
+        B, _, H, W = x.shape
+        H_p = H // self.patch_size[0]
+        W_p = W // self.patch_size[1]
+
+        with torch.no_grad():
+            self.backbone.forward_features(x)
+
+        features = {}
+        for slot, block_idx in enumerate(self.tap_blocks):
+            feat = self._features[slot]                        # [B, 1+N, C]
+            feat = feat[:, 1:, :]                              # Drop CLS
+            feat = feat.reshape(B, H_p, W_p, -1)              # → [B, H_p, W_p, C]
+            feat = feat.permute(0, 3, 1, 2).contiguous()      # → [B, C, H_p, W_p]
+            features[f'clip_block{block_idx}'] = feat
+        return features
+
+    def train(self, mode=True):
+        return super().train(False)
+
+
 class ViT(nn.Module):
     """
     A frozen ViT-B/16 backbone for multi-scale feature extraction.

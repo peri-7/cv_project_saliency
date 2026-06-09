@@ -80,4 +80,4 @@ val_loss = evaluate_model_online(extractor, decoder, val_loader, criterion, devi
 print(f"Smoke Test Epoch 1 | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
 
 print("✅ TO SMOKE TEST ΟΛΟΚΛΗΡΩΘΗΚΕ ΜΕ ΕΠΙΤΥΧΙΑ! ✅")
-print("Ο κώδικας του CLIP δεν έχει σφάλματα. Μπορείς να τρέξεις το κανονικό clip.py με σιγουριά!")
+print("Ο κώδικας του DINOv2 δεν έχει σφάλματα. Μπορείς να τρέξεις το κανονικό dinov2.py με σιγουριά!")

@@ -568,7 +568,7 @@ class DinoV3ViT(nn.Module):
         #    Native resolution is 256×256; dynamic_img_size=True lets timm
         #    interpolate position embeddings to our 480×640 input at runtime.
         base_model = timm.create_model(
-            model_name,
+            model_name = 'dinov3-vitb16-pretrain-lvd1689m',
             pretrained=True,
             num_classes=0,
             dynamic_img_size=True,

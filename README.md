@@ -59,16 +59,16 @@ rate (`Adam`, `lr=1e-4`), epoch count / LR schedule, batch size, input resolutio
 
 | Path | Purpose |
 |------|---------|
-| `src/models.py` | Frozen backbones: `ResNet` and `SamViT`, multi-scale feature extractors |
+| `src/models.py` | Frozen backbones: `ResNet`, `SamViT`, `MaeViT`, `ClipViT`, `ViT`, multi-scale feature extractors |
 | `src/decoder.py` | Shared trainable decoder head (`GroupNorm`, for small batch sizes) |
 | `src/losses.py` | `Composite_Loss` = `10·KLD − CC − SIM` (KLD/SIM on softmax probs, CC on logits) |
 | `src/metrics.py` | Discrete test-time metrics: NSS, AUC-Judd, Information Gain |
 | `src/dataset.py` | Datasets for raw images, cached features, and end-to-end training |
 | `src/training_online.py` | End-to-end train / eval / test loop (the primary route) |
 | `src/training.py` | Offline two-phase loop (cache features to disk, then train decoder) |
-| `testing2.py`, `testing_sam.py` | Online end-to-end smoke tests (ResNet / SAM) |
-| `testing.py` | Offline two-phase smoke test |
-| `notebooks/` | Kaggle training notebooks (`resnet`, `sam`); `.py` mirrors kept alongside for readability |
+| `local_tests/` | Local smoke tests (run against `mini_data/`): `testing2`/`_sam`/`_mae`/`_vit` (online), `testing` (offline) |
+| `kaggle_tests/` | Kaggle scripts (clone repo, Kaggle data paths): `{clip,mae,vit}_smoke_test.py` + the decoder-width sweep (`sweep.py` / `new-sweep.ipynb`, used to lock `hidden_dim` = 256) |
+| `notebooks/` | Kaggle training mirrors (`resnet`, `sam`, `mae`, `clip`, `vit`) + `.ipynb` real runs |
 | `inspect_mat.py`, `mat_to_png.py` | Utilities for SALICON `.mat` fixation files |
 
 The final benchmark reports the full metric set: **KLD, CC, SIM** (continuous, from the
@@ -96,12 +96,15 @@ Run from the repo root so `src/` is importable. The ViT backbones load through
 preinstalled on Kaggle); ResNet only needs `torchvision`.
 
 ```bash
-# Online end-to-end smoke test (backbone runs live, decoder trains)
-python testing2.py        # ResNet baseline
-python testing_sam.py     # SAM ViT-B
+# Online end-to-end smoke tests (backbone runs live, decoder trains)
+# Run as modules from the repo root so `src/` is importable.
+python -m local_tests.testing2     # ResNet baseline
+python -m local_tests.testing_sam  # SAM ViT-B
+python -m local_tests.testing_mae  # MAE ViT-B
+python -m local_tests.testing_vit  # supervised ViT-B
 
 # Offline two-phase smoke test: extract features to disk, then train the decoder
-python testing.py
+python -m local_tests.testing
 
 # Inspect the struct of a SALICON .mat fixation file
 python inspect_mat.py

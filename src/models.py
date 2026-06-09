@@ -416,6 +416,119 @@ class ClipViT(nn.Module):
         return super().train(False)
 
 
+class DinoV2ViT(nn.Module):
+    """
+    A frozen DINOv2 ViT-B/14 image encoder, exposed through the exact same
+    multi-scale contract as all other backbones.
+
+    DINOv2 was pretrained via self-distillation (no labels) on a curated 142M-image
+    dataset (LVD-142M). Its patch tokens are known to carry strong local spatial
+    structure, making them particularly well-suited for dense prediction tasks like
+    saliency.
+
+    KEY DIFFERENCE FROM THE OTHER ViT-B BACKBONES: DINOv2 uses patch size 14
+    instead of 16. 480×640 is not divisible by 14 (480/14 ≈ 34.3, 640/14 ≈ 45.7),
+    so the input is cropped to 476×630 (34×14, 45×14) before the patch embedding.
+    The resulting feature grid is 34×45 instead of 30×40. The decoder handles
+    arbitrary spatial sizes, so this is transparent downstream.
+
+    Architecturally this is a standard ViT with a CLS token — identical forward
+    path to MaeViT and ClipViT: drop CLS, reshape patch tokens to grid, permute
+    to channels-first.
+    """
+
+    def __init__(self,
+                 model_name='vit_base_patch14_dinov2.lvd142m',
+                 tap_blocks=None):
+        super().__init__()
+
+        try:
+            import timm
+        except ImportError as e:
+            raise ImportError(
+                "DinoV2ViT requires `timm` (pip install timm). It is preinstalled "
+                "on Kaggle; install it locally for smoke tests."
+            ) from e
+
+        # 1. Load the DINOv2-pretrained ViT-B/14 encoder.
+        #    Native resolution is 518×518; dynamic_img_size=True lets timm
+        #    interpolate position embeddings to our cropped 476×630 grid at runtime.
+        base_model = timm.create_model(
+            model_name,
+            pretrained=True,
+            num_classes=0,
+            dynamic_img_size=True,
+        )
+
+        # 2. Freeze every parameter.
+        for param in base_model.parameters():
+            param.requires_grad = False
+        base_model.eval()
+        self.backbone = base_model
+
+        # 3. Store patch size (14, 14) for the crop and token→grid reshape.
+        self.patch_size = base_model.patch_embed.patch_size
+
+        # 4. Four evenly-spaced tap depths (blocks 2, 5, 8, 11 for ViT-B/12).
+        num_blocks = len(base_model.blocks)
+        if tap_blocks is None:
+            tap_blocks = [
+                num_blocks // 4 - 1,
+                num_blocks // 2 - 1,
+                (3 * num_blocks) // 4 - 1,
+                num_blocks - 1,
+            ]
+        self.tap_blocks = tap_blocks
+
+        # 5. out_channels: [768, 768, 768, 768] for ViT-B.
+        embed_dim = base_model.embed_dim
+        self.out_channels = [embed_dim] * len(tap_blocks)
+
+        # 6. Forward hooks to capture intermediate block outputs.
+        self._features = {}
+        for slot, block_idx in enumerate(tap_blocks):
+            base_model.blocks[block_idx].register_forward_hook(self._make_hook(slot))
+
+    def _make_hook(self, slot):
+        def hook(module, inputs, output):
+            self._features[slot] = output
+        return hook
+
+    def forward(self, x):
+        """
+        Args:
+            x (torch.Tensor): [B, 3, H, W], ImageNet-normalized.
+        Returns:
+            dict: four [B, 768, H_p, W_p] feature tensors where
+                  H_p = (H // 14), W_p = (W // 14).
+        """
+        self._features = {}
+        B, _, H, W = x.shape
+
+        # Crop to the largest spatial size divisible by patch size 14.
+        H_p = H // self.patch_size[0]   # 480 // 14 = 34
+        W_p = W // self.patch_size[1]   # 640 // 14 = 45
+        H_crop = H_p * self.patch_size[0]  # 476
+        W_crop = W_p * self.patch_size[1]  # 630
+        if H != H_crop or W != W_crop:
+            x = x[:, :, :H_crop, :W_crop]
+
+        with torch.no_grad():
+            self.backbone.forward_features(x)
+
+        features = {}
+        for slot, block_idx in enumerate(self.tap_blocks):
+            feat = self._features[slot]                        # [B, 1+N, C]
+            feat = feat[:, 1:, :]                              # Drop CLS → [B, N, C]
+            feat = feat.reshape(B, H_p, W_p, -1)              # → [B, H_p, W_p, C]
+            feat = feat.permute(0, 3, 1, 2).contiguous()      # → [B, C, H_p, W_p]
+            features[f'dino_block{block_idx}'] = feat
+        return features
+
+    def train(self, mode=True):
+        return super().train(False)
+
+
 class ViT(nn.Module):
     """
     A frozen ViT-B/16 backbone for multi-scale feature extraction.

@@ -552,7 +552,7 @@ class DinoV3ViT(nn.Module):
     """
 
     def __init__(self,
-                 model_name='vit_base_patch16_dinov3.lvd1689m',
+                 model_name='vit_base_patch16_dinov3',
                  tap_blocks=None):
         super().__init__()
 
@@ -568,7 +568,7 @@ class DinoV3ViT(nn.Module):
         #    Native resolution is 256×256; dynamic_img_size=True lets timm
         #    interpolate position embeddings to our 480×640 input at runtime.
         base_model = timm.create_model(
-            model_name = 'dinov3-vitb16-pretrain-lvd1689m',
+            model_name,
             pretrained=True,
             num_classes=0,
             dynamic_img_size=True,

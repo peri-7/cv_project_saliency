@@ -9,7 +9,7 @@ for saliency?*
 
 ## Backbones
 
-The study targets a roster of **five ViT-B-scale backbones**, deliberately chosen to
+The study targets a roster of **six ViT-B-scale backbones**, deliberately chosen to
 have approximately the same parameter count (~86–90M) so the *pretraining objective*
 — not model capacity — is the variable. ResNet-50 is the original baseline and stays
 in for reference (it is not ViT-B, so it sits outside the param-matched family).
@@ -19,7 +19,8 @@ in for reference (it is not ViT-B, so it sits outside the param-matched family).
 | ResNet-50     | ImageNet supervised          | ✅ implemented — `ResNet` (baseline) |
 | ViT-B         | ImageNet supervised          | ✅ implemented — `ViT`    (baseline) |
 | SAM ViT-B     | Segment Anything (SA-1B)     | ✅ implemented — `SamViT`            |
-| DINOv2 ViT-B  | self-distillation            | ⬜ planned                           |
+| DINOv2 ViT-B  | self-distillation            | ✅ implemented — `DinoV2ViT`         |
+| DINOv3 ViT-B  | self-supervised (Gram-anchor)| ✅ implemented — `DinoV3ViT`         |
 | MAE ViT-B     | masked autoencoding          | ✅ implemented — `MaeViT`            |
 | CLIP ViT-B    | image–text contrastive       | ✅ implemented — `ClipViT`           |
 
@@ -34,11 +35,14 @@ fairness is structural rather than a per-model tuning choice.
 
 > **SAM is the plumbing odd-one-out.** Its timm encoder uses windowed attention and
 > keeps features as spatial `[B, H, W, C]` with no CLS token, so `SamViT` just permutes
-> to channels-first. The other four ViT-Bs are token-sequence models (`[B, 1+N, C]` with
-> a CLS token) and will need a token→grid reshape plus CLS-drop — so those four wrappers
-> will be near-copies of each other (factor a shared ViT base when adding them). Note
-> DINOv2 is patch-14, so 480×640 needs care (not divisible by 14); the others are
-> patch-16 and clean.
+> to channels-first. The rest of the ViT-Bs are token-sequence models (`[B, 1+N, C]`)
+> that need a token→grid reshape plus prefix-token drop, so those wrappers are
+> near-copies of each other over a shared pattern. Two carry extra plumbing:
+> **DINOv2 is patch-14**, so 480×640 isn't divisible by 14 — the input is cropped to
+> 476×630 (a clean 34×45 grid) before patch embedding. **DINOv3 is patch-16** (so no
+> crop, clean 30×40 grid) but inserts **register tokens** between CLS and the patch
+> tokens, so instead of dropping one leading token it keeps the *last* `H_p·W_p` tokens.
+> The supervised ViT, MAE, and CLIP are plain patch-16 with a single CLS token.
 
 ## Approach
 
@@ -59,7 +63,7 @@ rate (`Adam`, `lr=1e-4`), epoch count / LR schedule, batch size, input resolutio
 
 | Path | Purpose |
 |------|---------|
-| `src/models.py` | Frozen backbones: `ResNet`, `SamViT`, `MaeViT`, `ClipViT`, `ViT`, multi-scale feature extractors |
+| `src/models.py` | Frozen backbones: `ResNet`, `SamViT`, `MaeViT`, `ClipViT`, `DinoV2ViT`, `DinoV3ViT`, `ViT`, multi-scale feature extractors |
 | `src/decoder.py` | Shared trainable decoder head (`GroupNorm`, for small batch sizes) |
 | `src/losses.py` | `Composite_Loss` = `10·KLD − CC − SIM` (KLD/SIM on softmax probs, CC on logits) |
 | `src/metrics.py` | Discrete test-time metrics: NSS, AUC-Judd, Information Gain |
@@ -67,8 +71,8 @@ rate (`Adam`, `lr=1e-4`), epoch count / LR schedule, batch size, input resolutio
 | `src/training_online.py` | End-to-end train / eval / test loop (the primary route) |
 | `src/training.py` | Offline two-phase loop (cache features to disk, then train decoder) |
 | `local_tests/` | Local smoke tests (run against `mini_data/`): `testing2`/`_sam`/`_mae`/`_vit` (online), `testing` (offline) |
-| `kaggle_tests/` | Kaggle scripts (clone repo, Kaggle data paths): `{clip,mae,vit}_smoke_test.py` + the decoder-width sweep (`sweep.py` / `new-sweep.ipynb`, used to lock `hidden_dim` = 256) |
-| `notebooks/` | Kaggle training mirrors (`resnet`, `sam`, `mae`, `clip`, `vit`) + `.ipynb` real runs |
+| `kaggle_tests/` | Kaggle scripts (clone repo, Kaggle data paths): `{clip,mae,vit,dinov2,dinov3}_smoke_test.py` + the decoder-width sweep (`sweep.py` / `new-sweep.ipynb`, used to lock `hidden_dim` = 256) |
+| `notebooks/` | Kaggle training mirrors (`resnet`, `sam`, `mae`, `clip`, `vit`, `dinov2`, `dinov3`) + `.ipynb` real runs |
 | `inspect_mat.py`, `mat_to_png.py` | Utilities for SALICON `.mat` fixation files |
 
 The final benchmark reports the full metric set: **KLD, CC, SIM** (continuous, from the

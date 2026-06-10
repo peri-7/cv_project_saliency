@@ -24,7 +24,7 @@ from src.decoder import Decoder
 from src.losses import Composite_Loss
 from src.training_online import train_one_epoch_online, evaluate_model_online, test_model_online
 
-print("---  Phase 1+2: Model Inference + Decoder Training (DinoV2 ViT-B) ---")
+print("---  Phase 1+2: Model Inference + Decoder Training (DinoV3 ViT-B) ---")
 
 # Input normalization is held FIXED across all backbones for benchmark fairness.
 image_transform = transforms.Compose([

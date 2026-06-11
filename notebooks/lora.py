@@ -1,0 +1,187 @@
+# LoRA + Upgraded Decoder experiment (see lora/LORA.md).
+# NOT part of the frozen-backbone fairness study — this run chases the best
+# possible SALICON score with DINOv3 ViT-B. The two upgrades are independently
+# switchable for the ablation grid:
+#
+#   | Run      | USE_LORA | DECODER  | Isolates                            |
+#   |----------|----------|----------|-------------------------------------|
+#   | Ceiling  | True     | upgraded | both upgrades together              |
+#   | -LoRA    | False    | upgraded | decoder-only gain vs frozen dinov3  |
+#   | -decoder | True     | baseline | LoRA-only gain vs frozen dinov3     |
+#   | baseline | False    | baseline | == existing notebooks/dinov3.py     |
+
+USE_LORA = True          # True -> LoraDinoV3ViT + train_one_epoch_lora; False -> frozen DinoV3ViT + train_one_epoch_online
+DECODER  = "upgraded"    # "upgraded" -> ConvUpDecoder; "baseline" -> Decoder
+
+# 1. Clone your repository directly into the Kaggle working directory
+!git clone https://github.com/peri-7/cv_project_saliency.git
+
+import sys
+import os
+import torch
+
+# 2. Append the cloned repository folder to Python's path
+sys.path.append('/kaggle/working/cv_project_saliency/')
+
+# 3. Verify hardware acceleration
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Cloud Hardware active: {device}")
+
+# 4. DINOv3 weights are license-gated on Hugging Face — log in BEFORE building
+#    the extractor (store the token as a Kaggle secret named HF_TOKEN).
+from kaggle_secrets import UserSecretsClient
+from huggingface_hub import login
+login(token=UserSecretsClient().get_secret("HF_TOKEN"))
+
+import torch.optim as optim
+from torch.utils.data import DataLoader
+import torch.optim.lr_scheduler as lr_scheduler
+import torchvision.transforms as transforms
+from tqdm import tqdm
+
+from src.dataset import LoraDataset
+from src.models import DinoV3ViT
+from src.decoder import Decoder, ConvUpDecoder
+from src.losses import Composite_Loss
+from src.lora import LoraDinoV3ViT, train_one_epoch_lora, test_model_online_lora
+from src.training_online import train_one_epoch_online, evaluate_model_online
+
+RUN_NAME = f"dinov3_{'lora' if USE_LORA else 'frozen'}_{DECODER}"
+CKPT_PATH = f"/kaggle/working/best_{RUN_NAME}.pth"
+print(f"--- LoRA experiment run: {RUN_NAME} ---")
+
+# Input normalization is held FIXED across all backbones for benchmark fairness.
+image_transform = transforms.Compose([
+    transforms.Resize((480, 640)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+])
+
+# Ground truth standardization
+map_transform = transforms.Compose([
+    transforms.Resize((480, 640)),
+    transforms.ToTensor()
+])
+
+base_input_path = '/kaggle/input/datasets/roshan401/salicon'
+
+# Smaller batch when LoRA is on: backprop through the trunk needs activation
+# memory even with gradient checkpointing (8 fits a 16 GB T4/P100).
+batch_size = 8 if USE_LORA else 16
+
+train_dataset = LoraDataset(
+    image_dir=os.path.join(base_input_path, "images/images/train"),
+    maps_dir=os.path.join(base_input_path, "maps/train"),
+    fixations_dir=os.path.join(base_input_path, "fixations/train"),
+    image_transform=image_transform,
+    map_transform=map_transform
+)
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
+
+val_dataset = LoraDataset(
+    image_dir=os.path.join(base_input_path, "images/images/val"),
+    maps_dir=os.path.join(base_input_path, "maps/val"),
+    fixations_dir=os.path.join(base_input_path, "fixations/val"),
+    image_transform=image_transform,
+    map_transform=map_transform
+)
+val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=2)
+
+# --- Extractor: LoRA-adapted or frozen DINOv3 ---
+if USE_LORA:
+    extractor = LoraDinoV3ViT(grad_checkpointing=True).to(device)
+    train_fn = train_one_epoch_lora
+else:
+    extractor = DinoV3ViT().to(device)
+    train_fn = train_one_epoch_online
+
+# --- Decoder: upgraded progressive-upsampling or baseline ---
+# hidden_dim locked at 256 per project convention.
+decoder_cls = ConvUpDecoder if DECODER == "upgraded" else Decoder
+decoder = decoder_cls(in_channels_list=extractor.out_channels, hidden_dim=256).to(device)
+
+criterion = Composite_Loss().to(device)
+
+# AdamW for both runs (decision #6 in lora/LORA.md). With LoRA, two param
+# groups: the decoder at the usual lr, the adapters slightly lower.
+if USE_LORA:
+    lora_params = extractor.trainable_parameters()
+    print(f"Trainable params — decoder: {sum(p.numel() for p in decoder.parameters()):,} | "
+          f"LoRA: {sum(p.numel() for p in lora_params):,}")
+    optimizer = optim.AdamW([
+        {'params': decoder.parameters(), 'lr': 1e-4},
+        {'params': lora_params, 'lr': 5e-5},
+    ], weight_decay=1e-4)
+else:
+    optimizer = optim.AdamW(decoder.parameters(), lr=1e-4, weight_decay=1e-4)
+
+epochs = 10
+scheduler = lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.01, total_iters=epochs)
+
+
+def save_checkpoint(path):
+    state = {'decoder': decoder.state_dict()}
+    if USE_LORA:
+        state['lora'] = {k: v for k, v in extractor.state_dict().items() if 'lora_' in k}
+    torch.save(state, path)
+
+
+def load_checkpoint(path):
+    ckpt = torch.load(path)
+    decoder.load_state_dict(ckpt['decoder'])
+    if USE_LORA:
+        extractor.load_state_dict(ckpt['lora'], strict=False)
+
+
+# Training Loop with Early Stopping
+patience = 0
+val_min = float('inf')
+
+for epoch in range(epochs):
+
+    current_lr = scheduler.get_last_lr()[0]
+
+    train_loss, kld, cc = train_fn(extractor, decoder, train_loader, optimizer, criterion, device)
+    val_loss = evaluate_model_online(extractor, decoder, val_loader, criterion, device)
+
+    print(f"Epoch {epoch+1} | LR: {current_lr:.3e} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
+
+    scheduler.step()
+
+    # Save the absolute best weights to the hard drive
+    if val_loss < val_min:
+        patience = 0
+        val_min = val_loss
+        save_checkpoint(CKPT_PATH)
+        print("  -> New best model saved!")
+    else:
+        patience += 1
+
+    if patience > 3:
+        print(f"Early Stopping triggered on Epoch {epoch}. Restoring best weights.")
+        load_checkpoint(CKPT_PATH)
+        break
+
+print("-" * 50)
+print("Training complete.")
+
+print("--- Final Evaluation ---")
+
+# Always benchmark the BEST checkpoint, not whatever weights happen to be in
+# memory after the last epoch.
+load_checkpoint(CKPT_PATH)
+
+# Run the strict metric calculation on the validation proxy set.
+# IG here uses a GAUSSIAN center-bias baseline (test_model_online_lora), a
+# stronger reference than the roster's uniform one — so the IG number is NOT
+# comparable with the frozen-roster benchmarks; the other six metrics are.
+avg_loss, avg_kld, avg_cc, avg_sim, avg_nss, avg_auc, avg_ig = test_model_online_lora(extractor, decoder, val_loader, criterion, device)
+
+print(f"Final Model Benchmark ({RUN_NAME}):")
+print(f"Composite Loss: {avg_loss:.4f}")
+print(f"KLD: {avg_kld:.4f}")
+print(f"CC:  {avg_cc:.4f}")
+print(f"SIM: {avg_sim:.4f}")
+print(f"NSS: {avg_nss:.4f}")
+print(f"AUC: {avg_auc:.4f}")
+print(f"IG:  {avg_ig:.4f} bits (vs Gaussian center-bias baseline)")

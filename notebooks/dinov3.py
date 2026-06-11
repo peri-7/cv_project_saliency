@@ -12,6 +12,12 @@ sys.path.append('/kaggle/working/cv_project_saliency/')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Cloud Hardware active: {device}")
 
+# 4. DINOv3 weights are license-gated on Hugging Face — log in BEFORE building
+#    the extractor (store the token as a Kaggle secret named HF_TOKEN).
+from kaggle_secrets import UserSecretsClient
+from huggingface_hub import login
+login(token=UserSecretsClient().get_secret("HF_TOKEN"))
+
 import torch.optim as optim
 from torch.utils.data import DataLoader
 import torch.optim.lr_scheduler as lr_scheduler
@@ -64,8 +70,7 @@ extractor = DinoV3ViT().to(device)
 
 decoder = Decoder(in_channels_list=extractor.out_channels, hidden_dim=256).to(device)
 criterion = Composite_Loss().to(device)
-#optimizer = optim.AdamW(decoder.parameters(), lr=1e-4, weight_decay=1e-4)
-optimizer = optim.Adam(decoder.parameters(), lr=1e-4)
+optimizer = optim.AdamW(decoder.parameters(), lr=1e-4, weight_decay=1e-4)
 epochs = 10
 scheduler = lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.01, total_iters=epochs)
 

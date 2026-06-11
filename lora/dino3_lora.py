@@ -13,6 +13,16 @@
 USE_LORA = True          # True -> LoraDinoV3ViT + train_one_epoch_lora; False -> frozen DinoV3ViT + train_one_epoch_online
 DECODER  = "upgraded"    # "upgraded" -> ConvUpDecoder; "baseline" -> Decoder
 
+# Resuming an interrupted run (Kaggle time limit):
+#   1. After the session dies, grab /kaggle/working/resume_<RUN_NAME>.pth from
+#      the session output and publish it as a Kaggle dataset.
+#   2. Mount that dataset as an input in the next session and point RESUME_FROM
+#      at the file. Leave None for a fresh run.
+# The resume file carries FULL state — current + best weights, optimizer
+# moments, scheduler, epoch, patience, val_min — so the resumed run continues
+# exactly where it left off (no AdamW momentum reset).
+RESUME_FROM = None  # e.g. "/kaggle/input/lora-resume/resume_dinov3_lora_upgraded.pth"
+
 # 1. Clone your repository directly into the Kaggle working directory
 !git clone https://github.com/peri-7/cv_project_saliency.git
 
@@ -48,6 +58,7 @@ from src.training_online import train_one_epoch_online, evaluate_model_online
 
 RUN_NAME = f"dinov3_{'lora' if USE_LORA else 'frozen'}_{DECODER}"
 CKPT_PATH = f"/kaggle/working/best_{RUN_NAME}.pth"
+RESUME_PATH = f"/kaggle/working/resume_{RUN_NAME}.pth"
 print(f"--- LoRA experiment run: {RUN_NAME} ---")
 
 # Input normalization is held FIXED across all backbones for benchmark fairness.
@@ -133,11 +144,51 @@ def load_checkpoint(path):
         extractor.load_state_dict(ckpt['lora'], strict=False)
 
 
+def save_resume_checkpoint(path, next_epoch):
+    """Full training state, written EVERY epoch so a killed session loses at
+    most the epoch in flight. Embeds the best-so-far weights too, so resuming
+    needs only this one file."""
+    state = {
+        'run_name': RUN_NAME,
+        'epoch': next_epoch,
+        'decoder': decoder.state_dict(),
+        'optimizer': optimizer.state_dict(),
+        'scheduler': scheduler.state_dict(),
+        'val_min': val_min,
+        'patience': patience,
+        'best': torch.load(CKPT_PATH),
+    }
+    if USE_LORA:
+        state['lora'] = {k: v for k, v in extractor.state_dict().items() if 'lora_' in k}
+    torch.save(state, path)
+
+
 # Training Loop with Early Stopping
+start_epoch = 0
 patience = 0
 val_min = float('inf')
 
-for epoch in range(epochs):
+if RESUME_FROM is not None:
+    ckpt = torch.load(RESUME_FROM, map_location=device)
+    assert ckpt['run_name'] == RUN_NAME, (
+        f"Resume checkpoint is for run {ckpt['run_name']!r} but the flags "
+        f"select {RUN_NAME!r} — refusing to mix configurations."
+    )
+    decoder.load_state_dict(ckpt['decoder'])
+    if USE_LORA:
+        extractor.load_state_dict(ckpt['lora'], strict=False)
+    optimizer.load_state_dict(ckpt['optimizer'])
+    scheduler.load_state_dict(ckpt['scheduler'])
+    start_epoch = ckpt['epoch']
+    val_min = ckpt['val_min']
+    patience = ckpt['patience']
+    # Restore the best-so-far weights to the working dir so best-checkpoint
+    # tracking and the final evaluation work exactly as in a single session.
+    torch.save(ckpt['best'], CKPT_PATH)
+    print(f"Resumed from {RESUME_FROM}: continuing at epoch {start_epoch+1}/{epochs} "
+          f"(val_min={val_min:.4f}, patience={patience})")
+
+for epoch in range(start_epoch, epochs):
 
     current_lr = scheduler.get_last_lr()[0]
 
@@ -156,6 +207,9 @@ for epoch in range(epochs):
         print("  -> New best model saved!")
     else:
         patience += 1
+
+    # Full-state resume checkpoint, overwritten every epoch (see RESUME_FROM).
+    save_resume_checkpoint(RESUME_PATH, next_epoch=epoch + 1)
 
     if patience > 3:
         print(f"Early Stopping triggered on Epoch {epoch}. Restoring best weights.")

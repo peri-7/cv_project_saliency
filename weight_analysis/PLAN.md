@@ -212,6 +212,51 @@ specializing neurons by depth.
 ResNet. The confound is **ResNet-specific** — the ViT family has 768 channels per tap
 (equal), so their column sums *are* directly comparable across taps and this doesn't bite.
 
+### SAM ViT-B (`best_sam_decoder.pth`, hidden_dim=256, full val)
+
+**The clean case** — all four taps share 768 channels and one /16 grid, so there's no
+channel-count confound and no resolution difference between taps. A and B agree cleanly.
+
+**Analysis A — tap importance** (column sums directly comparable; per-channel is just
+÷768, same proportions):
+
+| tap            | column sum | share |
+|----------------|------------|-------|
+| block 2 (/16)  | 1705.6     | 15.4% |
+| block 5 (/16)  | 2163.9     | 19.5% |
+| block 8 (/16)  | 3001.4     | 27.1% |
+| **block 11 (/16)** | **4216.3** | **38.0%** |
+
+**Analysis B — ablation (Δ vs baseline; baseline loss 0.769).** Ranking
+**block 11 ≫ block 8 > block 2 ≈ block 5**:
+
+| zeroed tap     | Δloss | Δcc     | Δnss    | Δig    |
+|----------------|-------|---------|---------|--------|
+| block 2 (/16)  | +0.350| +0.0001 | **+0.011** | −0.037 |
+| block 5 (/16)  | +0.306| −0.004  | +0.0001 | −0.030 |
+| block 8 (/16)  | +0.607| −0.036  | −0.074  | −0.094 |
+| **block 11 (/16)** | **+1.044** | **−0.077** | **−0.168** | **−0.198** |
+
+**Reading.** Importance rises **monotonically with depth**, block 11 dominant, and A and B
+agree with no correction needed (the clean validation that the two methods converge absent
+a confound). The two **shallow taps are nearly free to remove**: zeroing block 2 leaves cc
+unchanged (+0.0001) and even *raises* NSS (+0.011). The decoder reads almost entirely from
+the deep half (blocks 8 + 11). Since all taps are /16, this is pure abstraction-*depth*
+preference, not a resolution effect. **No banding** (every neuron monotone block11 > … >
+block2; row 144 is a high-magnitude outlier but still monotone).
+
+**Headline — contradicts the PLAN hypothesis.** We guessed SAM (segmentation-pretrained)
+would lean *shallow* (clean boundaries). It does the opposite: it leans hardest on its
+*deepest* block and its shallow blocks are near dead weight. More interesting than
+confirming the guess.
+
+**ResNet vs SAM contrast (handle with care):** ResNet's load-bearer is *mid*-level
+(stage3), SAM's is *deepest* (block 11). But ResNet's stages differ in **resolution**, so
+"mid wins" could partly be the deepest stage being penalized for /32 coarseness, not for
+abstraction. SAM's blocks are all /16, so depth is isolated cleanly. The fair cross-model
+comparison is therefore **SAM vs the other all-/16 ViTs** (MAE/DINOv2/DINOv3); ResNet
+stays the resolution-confounded baseline.
+
 ## Planned extension — per-channel-normalized importance
 
 Add a per-channel-normalized view to Analysis A so the channel-count confound is visible

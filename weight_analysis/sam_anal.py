@@ -11,25 +11,25 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Cloud Hardware active: {device}")
 
 
-
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 
 from src.dataset import LoraDataset
 from src.decoder import Decoder
 from src.losses import Composite_Loss
-from src.models import ResNet
+from src.models import SamViT
 from weight_analysis.utils import run_analysis
 
 # --- Edit these for your environment (Kaggle paths shown) --------------------
-CKPT_PATH = '/kaggle/input/datasets/periclesalexiou/resnet-decoder/best_resnet_decoder.pth'
+CKPT_PATH = '/kaggle/input/datasets/periclesalexiou/sam-decoder/best_sam_decoder.pth'
 DATA_ROOT = '/kaggle/input/datasets/roshan401/salicon'
 OUT_DIR = '/kaggle/working'
 # -----------------------------------------------------------------------------
 
-MODEL_NAME = 'resnet'
-HIDDEN_DIM = 128  # the 128-width ResNet decoder beat the 256 one (PLAN.md)
-TAP_LABELS = ['stage1 (/4)', 'stage2 (/8)', 'stage3 (/16)', 'stage4 (/32)']
+MODEL_NAME = 'sam'
+HIDDEN_DIM = 256  # ViT-B roster width (PLAN.md)
+# All four taps share the /16 grid; variety is in depth, not resolution.
+TAP_LABELS = ['block 2 (/16)', 'block 5 (/16)', 'block 8 (/16)', 'block 11 (/16)']
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f'Device: {device}')
@@ -54,7 +54,7 @@ val_dataset = LoraDataset(
 )
 val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False, num_workers=2)
 
-extractor = ResNet().to(device)
+extractor = SamViT().to(device)
 decoder = Decoder(in_channels_list=extractor.out_channels,
                   hidden_dim=HIDDEN_DIM).to(device)
 decoder.load_state_dict(torch.load(CKPT_PATH, map_location=device))

@@ -84,6 +84,24 @@ M[i, k] = sum over channels c in tap k of  |W[i, c]| · std(x_c)
   scale is partly absorbed downstream — **only relative (per-tap) comparison is
   meaningful**, which is exactly what we want.
 
+**Why `|W|·std` and not raw `|W|` (the real reason).** A neuron's output is
+`Σ_c W[i,c]·x_c`, so a channel's contribution is `W·x` — it depends on weight *and*
+feature size. Channels live at very different magnitudes (early vs late blocks, ResNet
+stage1 vs stage4), and training learns `|W| ∝ 1/magnitude`: small-magnitude-but-useful
+channels get *large* weights, large-magnitude ones get *small* weights. So raw `|W|`
+mostly measures how small a channel's features were, not how much the decoder relies on
+it — and our runs use plain Adam (no weight decay), so even dead weights aren't pruned to
+zero. Multiplying by `std(x_c)` cancels the scale and leaves the typical contribution
+size, which is the thing we actually mean by "reliance."
+
+**Why `std` and not `mean`/`max`.** What shapes the saliency *map* is how much a channel
+*varies* across positions/images (its spread), not its baseline level. The `mean` is a
+constant offset: it shifts the whole map uniformly and is re-centered away by the
+downstream `GroupNorm`, so it doesn't change the pattern → use std, not mean. (A truly
+constant channel has std 0, so std correctly gives it ~0 importance — mean would wrongly
+inflate it.) `max` keys off a single outlier pixel and is noisy; we want the *typical*
+swing → std, not max. This choice is independent of weight decay.
+
 **Plot:** heatmap, rows = output neurons (256, or 128 for ResNet — fewer rows is fine,
 ResNet is just the baseline), columns = the 4 taps (shallow→deep). Two readings:
 
@@ -152,6 +170,56 @@ weight_analysis/
   dict is normal `[B,768,30,40]`. No special handling needed here.
 - All backbones are frozen + locked to `eval()`; run the backbone in `torch.no_grad()`
   (the std-collection pass and both analyses are inference-only — nothing trains).
+
+## Results
+
+### ResNet baseline (`best_resnet_decoder128.pth`, hidden_dim=128, full val)
+
+**Analysis A — tap importance.** Raw column sums grow monotonically with depth, BUT
+ResNet's taps have unequal channel counts, so the column sum is partly just "more
+channels":
+
+| tap            | chans | column sum | share | per-channel (sum/chans) |
+|----------------|-------|------------|-------|--------------------------|
+| stage1 (/4)    | 256   | 275.1      | 11.1% | **1.075**                |
+| stage2 (/8)    | 512   | 414.2      | 16.7% | 0.809                    |
+| stage3 (/16)   | 1024  | 766.5      | 31.0% | 0.749                    |
+| stage4 (/32)   | 2048  | 1019.6     | 41.2% | 0.498                    |
+
+Per **channel** the order *reverses* (shallow highest), and stage3 > stage4.
+
+**Analysis B — ablation (Δ vs baseline; baseline loss 1.571).** Every metric agrees on
+one ranking: **stage3 ≫ stage4 > stage2 > stage1**. Zeroing stage3 nearly doubles the
+loss (→3.19), ~2.3× the damage of zeroing stage4.
+
+| zeroed tap    | Δloss | Δcc    | Δnss   | Δig    |
+|---------------|-------|--------|--------|--------|
+| stage1 (/4)   | +0.29 | −0.008 | −0.017 | −0.060 |
+| stage2 (/8)   | +0.53 | −0.019 | −0.034 | −0.090 |
+| **stage3 (/16)** | **+1.62** | **−0.060** | **−0.102** | **−0.235** |
+| stage4 (/32)  | +0.70 | −0.037 | −0.075 | −0.101 |
+
+**Reading.** A's *raw column-sum* headline ("stage4 dominates") is a **channel-count
+artifact**, not real reliance. Correct A for channel count and it flips to agree with the
+causal ablation: **stage3 (/16, mid/high level) is the load-bearing tap, not the deepest
+stage.** The two shallow taps matter least in both analyses.
+
+Per-neuron rows show **no banding** — nearly every neuron has the same monotone profile
+(stage4 ≥ stage3 > stage2 > stage1); the decoder blends taps homogeneously rather than
+specializing neurons by depth.
+
+**Caveat for the writeup:** lead with the ablation (or per-channel-normalized A) for
+ResNet. The confound is **ResNet-specific** — the ViT family has 768 channels per tap
+(equal), so their column sums *are* directly comparable across taps and this doesn't bite.
+
+## Planned extension — per-channel-normalized importance
+
+Add a per-channel-normalized view to Analysis A so the channel-count confound is visible
+automatically (and harmless for the equal-width ViTs): alongside each tap's column sum,
+also report `column_sum / out_channels[k]` (mean contribution per channel). For ResNet the
+two columns tell different stories (see above); for the ViTs they're proportional. Cheap
+to add in `tap_importance`/`run_analysis` output and the `*_tap_importance.csv` — not yet
+implemented.
 
 ## Decisions locked
 

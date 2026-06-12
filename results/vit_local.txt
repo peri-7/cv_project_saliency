@@ -1,0 +1,27 @@
+Cloud Hardware active: cuda
+---  Phase 1+2: Model Inference + Decoder Training (ViT-B) ---
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Epoch 1 | LR: 1.000e-04 | Train Loss: 1.7443 | Val Loss: 1.1805
+  -> New best model saved!
+Epoch 2 | LR: 9.010e-05 | Train Loss: 1.1736 | Val Loss: 1.1477
+  -> New best model saved!
+Epoch 3 | LR: 8.020e-05 | Train Loss: 0.9495 | Val Loss: 1.0924
+  -> New best model saved!
+Epoch 4 | LR: 7.030e-05 | Train Loss: 0.7832 | Val Loss: 1.0496
+  -> New best model saved!
+Epoch 5 | LR: 6.040e-05 | Train Loss: 0.6320 | Val Loss: 1.0639
+Epoch 6 | LR: 5.050e-05 | Train Loss: 0.5066 | Val Loss: 1.1040
+Epoch 7 | LR: 4.060e-05 | Train Loss: 0.3961 | Val Loss: 1.0813
+Epoch 8 | LR: 3.070e-05 | Train Loss: 0.3038 | Val Loss: 1.1211
+Early Stopping triggered on Epoch 7. Restoring best weights.
+--------------------------------------------------
+Training complete.
+--- Phase 3: Final Evaluation ---
+Final Model Benchmark (ViT-B Backbone) (hidden_dim=256):
+Composite Loss: 1.0496
+KLD: 0.2493
+CC:  0.6881
+SIM: 0.7555
+NSS: 1.2977
+AUC: 0.8637
+IG:  1.5531 bits

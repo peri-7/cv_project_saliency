@@ -1,0 +1,24 @@
+Device: cuda
+Loading empirical baseline from: ./saved_models/center_bias_baseline.pt
+Baseline loaded. Shape: torch.Size([1, 1, 480, 640]), Sum: 1.000000
+
+=======================================================
+Backbone               IG (empirical baseline)
+=======================================================
+Evaluating ResNet-50...
+ResNet-50                               0.7906 bits                                                                                   
+Evaluating SAM ViT-B...
+SAM ViT-B                               0.8990 bits                                                                                   
+Evaluating ViT-B...
+ViT-B                                   0.8538 bits                                                                                   
+Evaluating MAE ViT-B...
+MAE ViT-B                               0.8894 bits                                                                                                
+Evaluating DINOv2 ViT-B...
+DINOv2 ViT-B                            0.9356 bits                                                                                                
+Evaluating DINOv3 ViT-B...
+DINOv3 ViT-B                            0.9366 bits                                                                                                
+Evaluating CLIP ViT-B...
+CLIP ViT-B                              0.9267 bits                                                                                                
+=======================================================
+
+Done.

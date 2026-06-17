@@ -66,7 +66,7 @@ val_dataset = LoraDataset(
 )
 val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False, num_workers=2)
 
-extractor = DinoV3ViT().to(device)
+extractor = DinoV3ViT(tap_blocks=[7, 8, 10, 11]).to(device)
 
 decoder = Decoder(in_channels_list=extractor.out_channels, hidden_dim=256).to(device)
 criterion = Composite_Loss().to(device)

@@ -12,14 +12,8 @@ sys.path.append('/kaggle/working/cv_project_saliency/')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Cloud Hardware active: {device}")
 
-# 4. DINOv3 weights are license-gated on Hugging Face — log in BEFORE building
-#    the extractor (store the token as a Kaggle secret named HF_TOKEN).
-import os
-from huggingface_hub import login
-if "HF_TOKEN" in os.environ:
-    login(token=os.environ["HF_TOKEN"])
-else:
-    print("Warning: HF_TOKEN not found in environment variables. DINOv3 download might fail if gated.")
+# (Removed HuggingFace login logic to match mae.py/clip.py structure)
+
 
 import torch.optim as optim
 from torch.utils.data import DataLoader

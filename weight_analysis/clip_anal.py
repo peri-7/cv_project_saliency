@@ -1,14 +1,15 @@
 # CLIP ViT-B/16 — Decoder interpretability (weight analysis)
 # Run from repo root:  python -m weight_analysis.clip_anal
-# Or paste into a Kaggle notebook cell (uncomment the git-clone + sys.path lines).
+# Or paste into a Kaggle notebook cell.
 
-# --- Uncomment these two lines on Kaggle -------------------------------------------
-# import subprocess; subprocess.run(['git', 'clone', 'https://github.com/peri-7/cv_project_saliency.git'])
-# import sys; sys.path.append('/kaggle/working/cv_project_saliency/')
-# ------------------------------------------------------------------------------------
+# 1. Clone your repository directly into the Kaggle working directory
+get_ipython().system('git clone https://github.com/peri-7/cv_project_saliency.git')
 
+import sys
 import os
 import torch
+
+sys.path.append('/kaggle/working/cv_project_saliency/')
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 
@@ -19,9 +20,9 @@ from src.models import ClipViT
 from weight_analysis.utils import run_analysis
 
 # --- Edit these for your environment (Kaggle paths shown) --------------------
-CKPT_PATH = './saved_models/best_clip_decoder.pth'
+CKPT_PATH = '/kaggle/input/datasets/periclesalexiou/clip-decoder/best_clip_decoder.pth'
 DATA_ROOT = '/kaggle/input/datasets/roshan401/salicon'
-OUT_DIR   = './weight_analysis'
+OUT_DIR   = '/kaggle/working'
 # -----------------------------------------------------------------------------
 
 MODEL_NAME = 'clip'

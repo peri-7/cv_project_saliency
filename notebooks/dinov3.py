@@ -14,9 +14,12 @@ print(f"Cloud Hardware active: {device}")
 
 # 4. DINOv3 weights are license-gated on Hugging Face — log in BEFORE building
 #    the extractor (store the token as a Kaggle secret named HF_TOKEN).
-from kaggle_secrets import UserSecretsClient
+import os
 from huggingface_hub import login
-login(token=UserSecretsClient().get_secret("HF_TOKEN"))
+if "HF_TOKEN" in os.environ:
+    login(token=os.environ["HF_TOKEN"])
+else:
+    print("Warning: HF_TOKEN not found in environment variables. DINOv3 download might fail if gated.")
 
 import torch.optim as optim
 from torch.utils.data import DataLoader

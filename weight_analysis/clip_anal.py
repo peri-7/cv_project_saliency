@@ -20,7 +20,7 @@ from src.models import ClipViT
 from weight_analysis.utils import run_analysis
 
 # --- Edit these for your environment (Kaggle paths shown) --------------------
-CKPT_PATH = '/kaggle/input/datasets/periclesalexiou/clip-decoder/best_clip_decoder.pth'
+CKPT_PATH = '/kaggle/input/notebooks/tsourouflizoe/notebook2c27e81430/best_clip_decoder.pth'
 DATA_ROOT = '/kaggle/input/datasets/roshan401/salicon'
 OUT_DIR   = '/kaggle/working'
 # -----------------------------------------------------------------------------

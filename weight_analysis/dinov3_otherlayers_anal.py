@@ -2,9 +2,6 @@
 # Run from repo root:  python -m weight_analysis.dinov3_otherlayers_anal
 # Or paste into a Kaggle notebook cell.
 
-# 1. Clone your repository directly into the Kaggle working directory
-get_ipython().system('git clone https://github.com/peri-7/cv_project_saliency.git')
-
 import sys
 import os
 import torch

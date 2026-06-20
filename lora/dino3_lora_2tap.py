@@ -43,11 +43,10 @@ sys.path.append('/kaggle/working/cv_project_saliency/')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Cloud Hardware active: {device}")
 
-# DINOv3 weights are license-gated on Hugging Face — log in BEFORE building
-# the extractor (store the token as a Kaggle secret named HF_TOKEN).
-from kaggle_secrets import UserSecretsClient
+# DINOv3 weights are license-gated on Hugging Face — pass the token via env:
+#   HF_TOKEN="hf_..." python /kaggle/working/cv_project_saliency/lora/dino3_lora_2tap.py
 from huggingface_hub import login
-login(token=UserSecretsClient().get_secret("HF_TOKEN"))
+login(token=os.environ["HF_TOKEN"])
 
 import torch.optim as optim
 from torch.utils.data import DataLoader

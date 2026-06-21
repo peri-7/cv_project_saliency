@@ -1,12 +1,12 @@
 """
 evaluate_lora_ig.py
 --------------
-Re-evaluates ONLY the Information Gain (IG) metric for best_dinov3_lora_upgraded.pth,
+Re-evaluates ONLY the Information Gain (IG) metric for dino + lora models,
 using the empirical center-bias baseline computed from the training fixations.
 
 Prerequisites:
     - ./saved_models/center_bias_baseline.pt  (from compute_baseline.py)
-    - ./lora/best_dinov3_lora_upgraded.pth
+    - ./lora/*.pth
 
 Usage:
     python evaluate_lora_ig.py
@@ -34,9 +34,9 @@ BASE_INPUT_PATH  = '/home/stamata/Downloads/salicon'
 BASELINE_PATH    = './saved_models/center_bias_baseline.pt'
 MODELS_DIR       = './lora'
 
-# Each entry: (display_name, extractor_class, hidden_dim, checkpoint_filename)
+# Each entry: (display_name, extractor_class, hidden_dim, checkpoint_filename, tap_blocks)
 BACKBONES = [
-    ("DiNOv3+LoRA",   LoraDinoV3ViT,  256, "best_dinov3_lora_upgraded.pth"),
+    ("DiNOv3+LoRA",   LoraDinoV3ViT,  256, "best_dinov3_lora_upgraded_2tap.pth", [10, 11]),
 ]
 
 
@@ -123,7 +123,7 @@ print("=" * 55)
 
 results = []
 
-for name, ExtractorClass, hidden_dim, ckpt_file in BACKBONES:
+for name, ExtractorClass, hidden_dim, ckpt_file, tap_blocks in BACKBONES:
 
     ckpt_path = os.path.join(MODELS_DIR, ckpt_file)
 
@@ -132,7 +132,7 @@ for name, ExtractorClass, hidden_dim, ckpt_file in BACKBONES:
         continue
 
     # Build model
-    extractor = ExtractorClass().to(device)
+    extractor = ExtractorClass(tap_blocks=tap_blocks).to(device)
     decoder = ConvUpDecoder(in_channels_list=extractor.out_channels, hidden_dim=256).to(device)
 
     ckpt = torch.load(ckpt_path, map_location=device)

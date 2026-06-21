@@ -8,7 +8,7 @@
 #   !HF_TOKEN="hf_..." python /kaggle/working/cv_project_saliency/lora/dino3_lora_2tap_eval.py
 
 # --- Point this at the best checkpoint from the training run ---
-CKPT_PATH = '/kaggle/input/notebooks/tsourouflizoe/notebook2c27e81430/best_dinov3_lora_upgraded_2tap.pth'
+CKPT_PATH = '/kaggle/working/cv_project_saliency/lora/best_dinov3_lora_upgraded_2tap.pth'
 
 TAP_BLOCKS = [10, 11]
 

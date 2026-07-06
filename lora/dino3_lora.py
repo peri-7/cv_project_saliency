@@ -23,11 +23,22 @@ DECODER  = "baseline"    # "upgraded" -> ConvUpDecoder; "baseline" -> Decoder
 # exactly where it left off (no AdamW momentum reset).
 RESUME_FROM = None  # e.g. "/kaggle/input/lora-resume/resume_dinov3_lora_upgraded.pth"
 
-# 1. Clone your repository directly into the Kaggle working directory
-!git clone https://github.com/peri-7/cv_project_saliency.git
-
+# 1. Clone your repository into the Kaggle working directory.
+#    Script-safe: works whether this file is executed as a plain `python` script
+#    or pasted into a notebook cell (the old `!git clone` magic only worked in a
+#    notebook and raised SyntaxError under `%run`/`python`). Idempotent — skips
+#    the clone if the repo is already present.
 import sys
 import os
+import subprocess
+
+_REPO_DIR = '/kaggle/working/cv_project_saliency'
+if not os.path.isdir(_REPO_DIR):
+    subprocess.run(
+        ['git', 'clone', 'https://github.com/peri-7/cv_project_saliency.git', _REPO_DIR],
+        check=True,
+    )
+
 import torch
 
 # 2. Append the cloned repository folder to Python's path
@@ -37,11 +48,25 @@ sys.path.append('/kaggle/working/cv_project_saliency/')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Cloud Hardware active: {device}")
 
-# 4. DINOv3 weights are license-gated on Hugging Face — log in BEFORE building
-#    the extractor (store the token as a Kaggle secret named HF_TOKEN).
-from kaggle_secrets import UserSecretsClient
+# 4. DINOv3 weights are license-gated on Hugging Face — authenticate BEFORE
+#    building the extractor. Token resolution order:
+#      1. HF_TOKEN environment variable — works when this file is launched as a
+#         script, e.g.  HF_TOKEN="hf_..." python lora/dino3_lora.py
+#      2. Kaggle secret named HF_TOKEN — for running inside a notebook cell.
 from huggingface_hub import login
-login(token=UserSecretsClient().get_secret("HF_TOKEN"))
+
+hf_token = os.environ.get("HF_TOKEN")
+if hf_token is None:
+    try:
+        from kaggle_secrets import UserSecretsClient
+        hf_token = UserSecretsClient().get_secret("HF_TOKEN")
+    except Exception as e:
+        raise RuntimeError(
+            "No Hugging Face token found. Either launch with "
+            "`HF_TOKEN=... python lora/dino3_lora.py`, or add a Kaggle secret "
+            "named HF_TOKEN."
+        ) from e
+login(token=hf_token)
 
 import torch.optim as optim
 from torch.utils.data import DataLoader

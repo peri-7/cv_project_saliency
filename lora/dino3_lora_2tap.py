@@ -17,7 +17,7 @@
 #   | baseline | False    | baseline | == existing notebooks/dinov3.py     |
 
 USE_LORA = True          # True -> LoraDinoV3ViT + train_one_epoch_lora; False -> frozen DinoV3ViT + train_one_epoch_online
-DECODER  = "upgraded"    # "upgraded" -> ConvUpDecoder; "baseline" -> Decoder
+DECODER  = "baseline"    # "upgraded" -> ConvUpDecoder; "baseline" -> Decoder
 
 # Resuming an interrupted run (Kaggle time limit):
 #   1. After the session dies, grab /kaggle/working/resume_<RUN_NAME>.pth from
@@ -58,8 +58,8 @@ from src.dataset import LoraDataset
 from src.models import DinoV3ViT
 from src.decoder import Decoder, ConvUpDecoder
 from src.losses import Composite_Loss
-from src.lora import LoraDinoV3ViT, train_one_epoch_lora, test_model_online_lora
-from src.training_online import train_one_epoch_online, evaluate_model_online
+from src.lora import LoraDinoV3ViT, train_one_epoch_lora
+from src.training_online import train_one_epoch_online, evaluate_model_online, test_model_online
 
 RUN_NAME = f"dinov3_{'lora' if USE_LORA else 'frozen'}_{DECODER}_2tap"
 CKPT_PATH = f"/kaggle/working/best_{RUN_NAME}.pth"
@@ -231,11 +231,50 @@ print("--- Final Evaluation ---")
 # memory after the last epoch.
 load_checkpoint(CKPT_PATH)
 
-# Run the strict metric calculation on the validation proxy set.
-# IG here uses a GAUSSIAN center-bias baseline (test_model_online_lora), a
-# stronger reference than the roster's uniform one — so the IG number is NOT
-# comparable with the frozen-roster benchmarks; the other six metrics are.
-avg_loss, avg_kld, avg_cc, avg_sim, avg_nss, avg_auc, avg_ig = test_model_online_lora(extractor, decoder, val_loader, criterion, device)
+# --- Empirical center-bias baseline for Information Gain ---
+# IG here is measured against the EMPIRICAL center-bias baseline (the actual
+# fixation density accumulated over the SALICON training set), NOT the analytic
+# Gaussian. This is the same reference the frozen-roster empirical-IG passes use
+# (see notebooks/evaluate_dinov3_781011.py), so this IG IS comparable to those.
+import numpy as np
+import scipy.io as sio
+from compute_baseline import parse_fixations  # reused fixation .mat parser
+
+BASELINE_PATH = "/kaggle/working/center_bias_baseline.pt"
+HEIGHT, WIDTH = 480, 640
+
+
+def build_empirical_baseline(fixations_dir, height, width):
+    """Accumulate all training fixations into a normalized [1,1,H,W] prior."""
+    mat_files = sorted(f for f in os.listdir(fixations_dir) if f.endswith('.mat'))
+    if not mat_files:
+        raise FileNotFoundError(f"No .mat fixation files in {fixations_dir}")
+    print(f"Recomputing empirical baseline from {len(mat_files)} training fixations...")
+    acc = np.zeros((height, width), dtype=np.float64)
+    for fname in tqdm(mat_files):
+        mat_data = sio.loadmat(os.path.join(fixations_dir, fname))
+        acc += parse_fixations(mat_data, height, width)
+    acc /= acc.sum()
+    return torch.tensor(acc, dtype=torch.float32).view(1, 1, height, width)
+
+
+if os.path.exists(BASELINE_PATH):
+    print(f"Loading empirical baseline from: {BASELINE_PATH}")
+    baseline = torch.load(BASELINE_PATH, map_location=device)
+else:
+    baseline = build_empirical_baseline(
+        os.path.join(base_input_path, "fixations/train"), HEIGHT, WIDTH
+    )
+    torch.save(baseline, BASELINE_PATH)
+    print(f"Empirical baseline saved to: {BASELINE_PATH}")
+baseline = baseline.to(device)
+print(f"Baseline shape: {tuple(baseline.shape)}, sum: {baseline.sum().item():.6f}\n")
+
+# Run the strict metric calculation on the validation proxy set. The six
+# baseline-independent metrics are identical to the roster; IG uses the
+# empirical center-bias baseline above.
+avg_loss, avg_kld, avg_cc, avg_sim, avg_nss, avg_auc, avg_ig = test_model_online(
+    extractor, decoder, val_loader, criterion, device, baseline_prob=baseline)
 
 print(f"Final Model Benchmark ({RUN_NAME}):")
 print(f"Composite Loss: {avg_loss:.4f}")
@@ -244,4 +283,4 @@ print(f"CC:  {avg_cc:.4f}")
 print(f"SIM: {avg_sim:.4f}")
 print(f"NSS: {avg_nss:.4f}")
 print(f"AUC: {avg_auc:.4f}")
-print(f"IG:  {avg_ig:.4f} bits (vs Gaussian center-bias baseline)")
+print(f"IG:  {avg_ig:.4f} bits (vs empirical center-bias baseline)")

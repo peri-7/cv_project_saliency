@@ -10,8 +10,8 @@
 #   | -decoder | True     | baseline | LoRA-only gain vs frozen dinov3     |
 #   | baseline | False    | baseline | == existing notebooks/dinov3.py     |
 
-USE_LORA = True          # True -> LoraDinoV3ViT + train_one_epoch_lora; False -> frozen DinoV3ViT + train_one_epoch_online
-DECODER  = "baseline"    # "upgraded" -> ConvUpDecoder; "baseline" -> Decoder
+USE_LORA = False         # True -> LoraDinoV3ViT + train_one_epoch_lora; False -> frozen DinoV3ViT + train_one_epoch_online
+DECODER  = "upgraded"    # "upgraded" -> ConvUpDecoder; "baseline" -> Decoder
 
 # Resuming an interrupted run (Kaggle time limit):
 #   1. After the session dies, grab /kaggle/working/resume_<RUN_NAME>.pth from
@@ -128,7 +128,7 @@ if USE_LORA:
     extractor = LoraDinoV3ViT(tap_blocks=[2, 5, 8, 11], grad_checkpointing=True).to(device)
     train_fn = train_one_epoch_lora
 else:
-    extractor = DinoV3ViT().to(device)
+    extractor = DinoV3ViT(tap_blocks=[2, 5, 8, 11]).to(device)
     train_fn = train_one_epoch_online
 
 # --- Decoder: upgraded progressive-upsampling or baseline ---

@@ -27,7 +27,7 @@
 #   best_dinov3_lora_baseline_2tap.pth  -> Decoder,       taps [10,11]    (the PAPER-BEST
 #                                          config; produced on Kaggle, not in the repo --
 #                                          mount it as a Kaggle input and point CKPT_PATH here)
-CKPT_PATH = '/kaggle/working/cv_project_saliency/lora/best_dinov3_lora_upgraded_2tap.pth'
+CKPT_PATH = '/kaggle/working/cv_project_saliency/saved_models/best_dinov3_lora_baseline_2tap.pth'
 
 # Leave as None to infer taps from the checkpoint (2 -> [10,11], 4 -> [2,5,8,11]).
 # Set explicitly only if you tapped non-standard blocks.

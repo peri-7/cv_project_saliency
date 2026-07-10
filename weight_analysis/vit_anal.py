@@ -23,10 +23,9 @@ from weight_analysis.utils import run_analysis
 CKPT_PATH = './saved_models/best_vit_decoder.pth'
 DATA_ROOT = '/home/stamata/Downloads/salicon'
 OUT_DIR = './weight_analysis'
-# -----------------------------------------------------------------------------
 
 MODEL_NAME = 'vit'
-HIDDEN_DIM = 256  # ViT-B roster width (PLAN.md)
+HIDDEN_DIM = 256  # ViT-B roster width (WEIGHTS.md)
 # All four taps share the /16 grid; variety is in depth, not resolution.
 TAP_LABELS = ['block 2 (/16)', 'block 5 (/16)', 'block 8 (/16)', 'block 11 (/16)']
 

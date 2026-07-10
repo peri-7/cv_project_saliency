@@ -25,10 +25,9 @@ from weight_analysis.utils import run_analysis
 CKPT_PATH = '/kaggle/input/datasets/periclesalexiou/resnet-decoder/best_resnet_decoder.pth'
 DATA_ROOT = '/kaggle/input/datasets/roshan401/salicon'
 OUT_DIR = '/kaggle/working'
-# -----------------------------------------------------------------------------
 
 MODEL_NAME = 'resnet'
-HIDDEN_DIM = 128  # the 128-width ResNet decoder beat the 256 one (PLAN.md)
+HIDDEN_DIM = 128  # the 128-width ResNet decoder beat the 256 one (WEIGHTS.md)
 TAP_LABELS = ['stage1 (/4)', 'stage2 (/8)', 'stage3 (/16)', 'stage4 (/32)']
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

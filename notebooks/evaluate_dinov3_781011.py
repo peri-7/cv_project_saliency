@@ -1,25 +1,20 @@
-# =============================================================================
-# evaluate_dinov3_781011.py  (Kaggle)
-# -----------------------------------------------------------------------------
-# Re-evaluates the ALREADY-TRAINED DINOv3 decoder with tap_blocks [7, 8, 10, 11]
-# and reports the full metric row, INCLUDING the missing IG (empirical baseline).
+# Re-evaluates the already-trained DINOv3 decoder with tap_blocks [7, 8, 10, 11]
+# and reports the full metric row, including the IG that the original run missed
+# (empirical baseline).
 #
-# It does NOT retrain — it loads `best_dinov3_decoder_781011.pth` and only runs
-# the final evaluation pass, matching how notebooks/dinov3.py produced the
-# original numbers (test_model_online, uniform IG) plus one extra pass against
-# the empirical center-bias baseline for the last column.
+# It doesn't retrain: it loads best_dinov3_decoder_781011.pth and runs only the
+# final evaluation pass, matching how notebooks/dinov3.py produced the original
+# numbers (test_model_online, uniform IG), plus one extra pass against the
+# empirical center-bias baseline for the last column.
 #
 # Prerequisites on Kaggle:
-#   1. Repo cloned:      /kaggle/working/cv_project_saliency/
-#        !git clone https://github.com/peri-7/cv_project_saliency.git
-#   2. SALICON dataset:  /kaggle/input/datasets/roshan401/salicon
-#   3. The checkpoint `best_dinov3_decoder_781011.pth` reachable at one of the
-#      CKPT_CANDIDATES paths below (upload it as a Kaggle dataset, or drop it in
-#      /kaggle/working). Adjust CKPT_CANDIDATES if your path differs.
+#   1. Repo cloned to /kaggle/working/cv_project_saliency/
+#   2. SALICON dataset at /kaggle/input/datasets/roshan401/salicon
+#   3. best_dinov3_decoder_781011.pth reachable at one of the CKPT_CANDIDATES
+#      paths below (upload it as a Kaggle dataset or drop it in /kaggle/working).
 #
-# The empirical baseline (center_bias_baseline.pt) is loaded if present,
-# otherwise it is recomputed from the training fixations and cached.
-# =============================================================================
+# The empirical baseline (center_bias_baseline.pt) is loaded if present, else
+# recomputed from the training fixations and cached.
 
 import sys
 import os
@@ -39,7 +34,7 @@ from src.models import DinoV3ViT
 from src.decoder import Decoder
 from src.losses import Composite_Loss
 from src.training_online import test_model_online
-from compute_baseline import parse_fixations  # reused fixation .mat parser
+from scripts.compute_baseline import parse_fixations  # reused fixation .mat parser
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Device: {device}")

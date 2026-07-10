@@ -1,15 +1,9 @@
-"""
-evaluate_ig.py
---------------
-Re-evaluates ONLY the Information Gain (IG) metric for all trained backbones,
-using the empirical center-bias baseline computed from the training fixations.
+"""Re-evaluate the Information Gain (IG) metric for every trained backbone against
+the empirical center-bias baseline from scripts/compute_baseline.py.
 
-Prerequisites:
-    - ./saved_models/center_bias_baseline.pt  (from compute_baseline.py)
-    - ./saved_models/best_*_decoder.pth       (all trained checkpoints)
+Needs ./saved_models/center_bias_baseline.pt and the best_*_decoder.pth checkpoints.
 
-Usage:
-    python evaluate_ig.py
+    python -m scripts.evaluate_ig
 """
 
 import os
@@ -25,8 +19,6 @@ from src.metrics import information_gain
 from src.models import ResNet, SamViT, ViT, MaeViT, DinoV2ViT, DinoV3ViT, ClipViT
 
 
-# ── Configuration ─────────────────────────────────────────────────────────────
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Device: {device}")
 
@@ -34,7 +26,7 @@ BASE_INPUT_PATH  = '/home/stamata/Downloads/salicon'
 BASELINE_PATH    = './saved_models/center_bias_baseline.pt'
 MODELS_DIR       = './saved_models'
 
-# Each entry: (display_name, extractor_class, hidden_dim, checkpoint_filename)
+# (display_name, extractor_class, hidden_dim, checkpoint_filename)
 BACKBONES = [
     ("ResNet-50",   ResNet,     256, "best_resnet_decoder.pth"),
     ("SAM ViT-B",   SamViT,     256, "best_sam_decoder.pth"),
@@ -46,8 +38,7 @@ BACKBONES = [
 ]
 
 
-# ── Transforms (identical to training) ────────────────────────────────────────
-
+# Transforms, identical to training.
 image_transform = transforms.Compose([
     transforms.Resize((480, 640)),
     transforms.ToTensor(),
@@ -60,8 +51,6 @@ map_transform = transforms.Compose([
 ])
 
 
-# ── Dataset ───────────────────────────────────────────────────────────────────
-
 val_dataset = LoraDataset(
     image_dir=os.path.join(BASE_INPUT_PATH, "images/images/val"),
     maps_dir=os.path.join(BASE_INPUT_PATH, "maps/val"),
@@ -72,14 +61,10 @@ val_dataset = LoraDataset(
 val_loader = DataLoader(val_dataset, batch_size=4, shuffle=False, num_workers=2)
 
 
-# ── Load Empirical Baseline ───────────────────────────────────────────────────
-
 print(f"Loading empirical baseline from: {BASELINE_PATH}")
 baseline = torch.load(BASELINE_PATH, map_location=device)  # [1, 1, 480, 640]
 print(f"Baseline loaded. Shape: {baseline.shape}, Sum: {baseline.sum().item():.6f}\n")
 
-
-# ── IG Evaluation Function ────────────────────────────────────────────────────
 
 @torch.no_grad()
 def evaluate_ig(extractor, decoder, dataloader, baseline_prob, device):
@@ -120,8 +105,6 @@ def evaluate_ig(extractor, decoder, dataloader, baseline_prob, device):
 
     return total_ig / len(dataloader)
 
-
-# ── Main Loop ─────────────────────────────────────────────────────────────────
 
 print("=" * 55)
 print(f"{'Backbone':<20} {'IG (empirical baseline)':>25}")

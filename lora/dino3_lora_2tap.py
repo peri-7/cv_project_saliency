@@ -119,8 +119,8 @@ decoder = decoder_cls(in_channels_list=extractor.out_channels, hidden_dim=256).t
 
 criterion = Composite_Loss().to(device)
 
-# AdamW for both runs (decision #6 in lora/LORA.md). With LoRA, two param
-# groups: the decoder at the usual lr, the adapters slightly lower.
+# AdamW for both runs (see lora/LORA.md). With LoRA, two param groups:
+# the decoder at the usual lr, the adapters slightly lower.
 if USE_LORA:
     lora_params = extractor.trainable_parameters()
     print(f"Trainable params — decoder: {sum(p.numel() for p in decoder.parameters()):,} | "
@@ -238,7 +238,7 @@ load_checkpoint(CKPT_PATH)
 # (see notebooks/evaluate_dinov3_781011.py), so this IG IS comparable to those.
 import numpy as np
 import scipy.io as sio
-from compute_baseline import parse_fixations  # reused fixation .mat parser
+from scripts.compute_baseline import parse_fixations  # reused fixation .mat parser
 
 BASELINE_PATH = "/kaggle/working/center_bias_baseline.pt"
 HEIGHT, WIDTH = 480, 640

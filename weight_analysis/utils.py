@@ -1,5 +1,5 @@
 """
-Shared logic for the decoder interpretability study (see weight_analysis/PLAN.md).
+Shared logic for the decoder interpretability study (see weight_analysis/WEIGHTS.md).
 
 Analysis A — tap_importance(): per-tap importance matrix M[i, k] built from the
     decoder's channel_compression weights, scale-corrected by per-channel feature
@@ -27,9 +27,7 @@ from src.training_online import test_model_online
 METRIC_NAMES = ['loss', 'kld', 'cc', 'sim', 'nss', 'auc', 'ig']
 
 
-# ---------------------------------------------------------------------------
 # Analysis A — per-tap importance
-# ---------------------------------------------------------------------------
 
 @torch.no_grad()
 def collect_channel_stds(extractor, dataloader, device, max_batches=None):
@@ -138,9 +136,7 @@ def plot_tap_importance(M, tap_labels, save_path, title):
     plt.close(fig)
 
 
-# ---------------------------------------------------------------------------
 # Analysis B — leave-one-tap-out ablation
-# ---------------------------------------------------------------------------
 
 class TapAblatedExtractor(nn.Module):
     """
@@ -213,9 +209,7 @@ def save_importance_csv(M, tap_labels, save_path):
         writer.writerow(['column_sum'] + [f'{v:.6f}' for v in M.sum(dim=0).tolist()])
 
 
-# ---------------------------------------------------------------------------
 # Orchestrator
-# ---------------------------------------------------------------------------
 
 def run_analysis(extractor, decoder, val_loader, criterion, device,
                  tap_labels, model_name, out_dir, max_std_batches=None):

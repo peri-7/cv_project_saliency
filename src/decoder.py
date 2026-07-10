@@ -9,13 +9,10 @@ def _num_groups(channels):
 
 
 class Decoder(nn.Module):
-    """
-    A lightweight, multi-scale convolutional decoding head utilizing 
-    Group Normalization for stability under low-batch-memory constraints.
-    """
+    """Lightweight multi-scale conv head. Uses GroupNorm since batches are small."""
     def __init__(self, in_channels_list, hidden_dim=512):
         super().__init__()
-        
+
         total_in_channels = sum(in_channels_list)
 
         # GroupNorm needs hidden_dim divisible by num_groups. Prefer 32 groups,
@@ -23,31 +20,29 @@ class Decoder(nn.Module):
         # different backbone) constructs without crashing. Always >= 1.
         num_groups = max(g for g in range(1, 33) if hidden_dim % g == 0)
 
-        # 1. Dimensionality Reduction
+        # Fuse the taps: concat channels -> 1x1 conv -> hidden_dim.
         self.channel_compression = nn.Conv2d(
-            in_channels=total_in_channels, 
-            out_channels=hidden_dim, 
-            kernel_size=1, 
-            bias=False # Bias is redundant before Normalization
+            in_channels=total_in_channels,
+            out_channels=hidden_dim,
+            kernel_size=1,
+            bias=False  # no bias needed before normalization
         )
-        
-        # GroupNorm splits the channels into groups (typically 32) to compute stats.
-        # It is strictly superior to BatchNorm for batch sizes < 16.
+
         self.norm1 = nn.GroupNorm(num_groups=num_groups, num_channels=hidden_dim)
-        
-        # 2. Spatial Smoothing
+
+        # 3x3 conv to spatially smooth the fused features.
         self.spatial_conv = nn.Conv2d(
-            in_channels=hidden_dim, 
-            out_channels=hidden_dim, 
-            kernel_size=3, 
-            padding=1, 
+            in_channels=hidden_dim,
+            out_channels=hidden_dim,
+            kernel_size=3,
+            padding=1,
             bias=False
         )
-        
+
         self.norm2 = nn.GroupNorm(num_groups=num_groups, num_channels=hidden_dim)
         self.activation = nn.ReLU(inplace=True)
-        
-        # 3. Logit Projection
+
+        # 1x1 conv to a single-channel logit map.
         self.output_head = nn.Conv2d(
             in_channels=hidden_dim, 
             out_channels=1, 
@@ -58,9 +53,9 @@ class Decoder(nn.Module):
     def forward(self, features):
         if isinstance(features, dict):
             features = list(features.values())
-            
-        target_size = features[0].shape[2:] 
-        
+
+        target_size = features[0].shape[2:]
+
         upsampled_features = []
         for feat in features:
             if feat.shape[2:] != target_size:
@@ -68,10 +63,9 @@ class Decoder(nn.Module):
                 upsampled_features.append(upsampled)
             else:
                 upsampled_features.append(feat)
-                
+
         fused_tensor = torch.cat(upsampled_features, dim=1)
-        
-        # Forward pass with GroupNorm
+
         x = self.channel_compression(fused_tensor)
         x = self.norm1(x)
         x = self.activation(x)
@@ -135,24 +129,24 @@ class ConvUpDecoder(nn.Module):
         mid_dim = hidden_dim // 2
         low_dim = hidden_dim // 4
 
-        # 1. Fuse the multi-scale taps: concat -> 1x1 conv -> hidden_dim.
+        # Fuse the multi-scale taps: concat -> 1x1 conv -> hidden_dim.
         self.channel_compression = nn.Conv2d(total_in_channels, hidden_dim,
                                              kernel_size=1, bias=False)
         self.fuse_norm = nn.GroupNorm(num_groups=_num_groups(hidden_dim),
                                       num_channels=hidden_dim)
         self.activation = nn.ReLU(inplace=True)
 
-        # 2. Refine at the native feature resolution (/16).
+        # Refine at the native feature resolution (/16).
         self.refine = _ConvBlock(hidden_dim, hidden_dim)
 
-        # 3. Progressive upsampling with channel taper:
+        # Progressive upsampling with channel taper:
         #    /16 -> /8 (hidden -> hidden/2), /8 -> /4 (hidden/2 -> hidden/4).
         #    The bilinear resize happens in forward(); each conv block then
         #    sharpens the stretched features before the next stage.
         self.up_block1 = _ConvBlock(hidden_dim, mid_dim)
         self.up_block2 = _ConvBlock(mid_dim, low_dim)
 
-        # 4. Logit head at /4.
+        # Logit head at /4.
         self.output_head = nn.Conv2d(low_dim, 1, kernel_size=1, bias=True)
 
     def forward(self, features):

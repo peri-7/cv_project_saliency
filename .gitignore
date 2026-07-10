@@ -1,9 +1,16 @@
-
-
+# Ignore stray PNGs by default (intermediate plots, debug dumps)...
 *.png
+# ...but keep the result figures and qualitative grids used in the report.
+!results/*.png
+!viz_out/*.png
+!viz_out/**/*.png
+!weight_analysis/figures/*.png
+!phase1_analysis/figures/*.png
+
 .env
 .ipynb_checkpoints
 __pycache__
+*.pyc
 data
 mini_data
 CLAUDE.md

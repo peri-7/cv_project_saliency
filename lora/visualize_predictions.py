@@ -14,9 +14,7 @@
 #   best_model_predictions_grid.png   -- the combined appendix figure
 #   panel_<rank>_<name>.png           -- one high-res panel per example (for slides)
 #
-# ---------------------------------------------------------------------------
 # CONFIG
-# ---------------------------------------------------------------------------
 # Point this at your best checkpoint. The script AUTO-DETECTS the decoder type
 # (lightweight `Decoder` vs progressive `ConvUpDecoder`) and the number of taps
 # from the checkpoint itself, so any of the LoRA checkpoints below just works:
@@ -49,7 +47,6 @@ ALPHA   = 0.6             # overlay strength of the heatmap over the image
 OUT_DIR = '/kaggle/working/viz_out'
 SEED    = 0
 
-# ---------------------------------------------------------------------------
 import os
 import sys
 
@@ -107,9 +104,7 @@ val_dataset = LoraDataset(
 print(f'Validation images: {len(val_dataset)}')
 
 
-# ---------------------------------------------------------------------------
 # Rebuild the exact architecture from the checkpoint, then load the weights.
-# ---------------------------------------------------------------------------
 def build_from_checkpoint(ckpt_path):
     """Infer decoder class + tap count from the saved decoder state, so the same
     script serves every LoRA checkpoint without hand-editing flags."""
@@ -177,9 +172,7 @@ def metrics_for(logits, prob, gt_map, fix_map):
     }
 
 
-# ---------------------------------------------------------------------------
 # Choose which validation images to display.
-# ---------------------------------------------------------------------------
 def select_indices():
     names = val_dataset.image_filenames
 
@@ -219,9 +212,7 @@ def select_indices():
     return list(chosen), tags
 
 
-# ---------------------------------------------------------------------------
 # Rendering
-# ---------------------------------------------------------------------------
 def denorm(image):
     """Normalized [3,H,W] tensor -> HWC uint8-ish float in [0,1] for display."""
     x = image * IMAGENET_STD + IMAGENET_MEAN

@@ -24,7 +24,6 @@ from weight_analysis.utils import run_analysis
 CKPT_PATH = '/kaggle/input/datasets/periclesalexiou/dinov3-decoder/best_dinov3_decoder.pth'
 DATA_ROOT = '/kaggle/input/datasets/roshan401/salicon'
 OUT_DIR = '/kaggle/working'
-# -----------------------------------------------------------------------------
 
 MODEL_NAME = 'dinov3'
 HIDDEN_DIM = 256  # ViT-B roster width

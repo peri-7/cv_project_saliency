@@ -1,27 +1,21 @@
-# =============================================================================
-# dino3_lora_eval.py  (Kaggle)
-# -----------------------------------------------------------------------------
-# Evaluation-ONLY pass for the DINOv3 + LoRA / baseline-decoder run
+# Evaluation-only pass for the DINOv3 + LoRA / baseline-decoder run
 # (dino3_lora.py with USE_LORA=True, DECODER="baseline", taps [2,5,8,11]).
 #
-# Use this when the training session finished and saved a checkpoint but the
-# Kaggle 12h limit killed the process before the final evaluation block ran.
-# It does NOT retrain — it loads the saved checkpoint and runs the exact same
-# final evaluation dino3_lora.py would have run: the six baseline-independent
-# metrics plus Information Gain against the EMPIRICAL center-bias baseline
-# (accumulated from the SALICON training fixations), NOT the analytic Gaussian.
+# Handy when the training session saved a checkpoint but Kaggle's 12h limit killed
+# the process before the final evaluation block ran. It doesn't retrain: it loads
+# the checkpoint and runs the same final evaluation dino3_lora.py would have -- the
+# six baseline-independent metrics plus Information Gain against the empirical
+# center-bias baseline (from the SALICON training fixations), not the Gaussian one.
 #
-# Prerequisites on Kaggle (GPU on, Internet on):
-#   1. Repo present at /kaggle/working/cv_project_saliency (cloned below if not).
+# Prerequisites on Kaggle (GPU + Internet on):
+#   1. Repo at /kaggle/working/cv_project_saliency (cloned below if missing).
 #   2. SALICON dataset at /kaggle/input/datasets/roshan401/salicon.
-#   3. HF token: either launch as `HF_TOKEN=... python .../dino3_lora_eval.py`
-#      or add a Kaggle secret named HF_TOKEN (DINOv3 weights are license-gated).
-#   4. The trained checkpoints are committed INSIDE the repo under lora/
-#      (best_dinov3_lora_simpledecoder.pth and/or resume_dinov3_lora_baseline.pth),
-#      so they arrive with the clone — no Kaggle dataset needed for the weights.
-# =============================================================================
+#   3. HF token: run as `HF_TOKEN=... python .../dino3_lora_eval.py` or add a
+#      Kaggle secret named HF_TOKEN (DINOv3 weights are license-gated).
+#   4. The trained checkpoints ship inside the repo under lora/, so they arrive
+#      with the clone -- no separate Kaggle dataset needed for the weights.
 
-# --- Config: must match the training run being evaluated ---
+# Config: must match the training run being evaluated.
 TAP_BLOCKS = [2, 5, 8, 11]   # LoRA + baseline decoder run tapped these blocks
 HIDDEN_DIM = 256             # baseline Decoder width (locked project convention)
 HEIGHT, WIDTH = 480, 640
@@ -72,7 +66,7 @@ from src.decoder import Decoder
 from src.losses import Composite_Loss
 from src.lora import LoraDinoV3ViT
 from src.training_online import test_model_online
-from compute_baseline import parse_fixations  # reused fixation .mat parser
+from scripts.compute_baseline import parse_fixations  # reused fixation .mat parser
 
 base_input_path = '/kaggle/input/datasets/roshan401/salicon'
 

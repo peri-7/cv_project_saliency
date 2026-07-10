@@ -15,9 +15,7 @@
 #
 # Output (OUT_DIR): cross_backbone_comparison_grid.png
 #
-# ---------------------------------------------------------------------------
 # CONFIG
-# ---------------------------------------------------------------------------
 REPO = '/kaggle/working/cv_project_saliency'
 
 # The first entry (kind='lora') is treated as "ours" and drives image selection.
@@ -50,7 +48,6 @@ ALPHA   = 0.6
 OUT_DIR = '/kaggle/working/viz_out'
 SEED    = 0
 
-# ---------------------------------------------------------------------------
 import os
 import sys
 import gc
@@ -107,9 +104,7 @@ print(f'Validation images: {len(val_dataset)}')
 _cc, _kld, _sim = CC_Loss(), KLD_Loss(), SIM_Loss()
 
 
-# ---------------------------------------------------------------------------
 # Model building (each kind knows how to rebuild its architecture + load weights)
-# ---------------------------------------------------------------------------
 def build_lora(ckpt_path):
     """DINOv3 + LoRA; decoder class and tap count auto-detected from the file."""
     ckpt = torch.load(ckpt_path, map_location='cpu')
@@ -165,9 +160,7 @@ def scores(logits, gt_map, fix_map):
     return cc, ns
 
 
-# ---------------------------------------------------------------------------
 # Pick images using the FIRST model (ours), then keep it for the render pass.
-# ---------------------------------------------------------------------------
 def select_with(extractor, decoder):
     names = val_dataset.image_filenames
     if SELECTION == 'fixed':
@@ -197,9 +190,7 @@ def select_with(extractor, decoder):
     return list(order[picks]), [f'CC pct {100 - int(f * 100)}' for f in fracs]
 
 
-# ---------------------------------------------------------------------------
 # Rendering helpers
-# ---------------------------------------------------------------------------
 def denorm(image):
     return (image * IMAGENET_STD + IMAGENET_MEAN).clamp(0, 1).permute(1, 2, 0).cpu().numpy()
 

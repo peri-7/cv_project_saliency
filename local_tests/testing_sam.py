@@ -16,7 +16,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("---  Phase 1+2: Model Inference + Decoder Training (SAM ViT-B) ---")
 
 # Same transforms as the ResNet smoke test: input normalization is held fixed
-# across backbones for benchmark fairness (see CLAUDE.md).
+# across backbones for benchmark fairness (see README.md).
 image_transform = transforms.Compose([
     transforms.Resize((480, 640)),
     transforms.ToTensor(),

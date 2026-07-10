@@ -1,23 +1,19 @@
 """
 LoRA pathway for the DINOv3 + upgraded-decoder experiment (see lora/LORA.md).
 
-This is a DELIBERATELY SEPARATE training pathway from `training.py` /
-`training_online.py`. The CLAUDE.md "mirror into both" rule applies to those
-two frozen-backbone routes; LoRA is a distinct mode that backprops through the
-backbone trunk. Only `train_one_epoch_lora` lives here — validation and final
-benchmarking REUSE `evaluate_model_online` / `test_model_online` from
-`src/training_online.py` unchanged (they run under torch.no_grad(), which is
-correct at inference for LoRA too).
+Separate from training.py / training_online.py: those cover the frozen-backbone
+roster, while LoRA backprops through the backbone trunk. Only train_one_epoch_lora
+lives here; validation and final benchmarking reuse evaluate_model_online /
+test_model_online from src/training_online.py unchanged (they run under
+torch.no_grad(), which is correct at inference for LoRA too).
 
-IMPLEMENTATION NOTE — why this does NOT use forward hooks like the frozen
-backbones in `src/models.py`: with gradient checkpointing enabled, each block's
-forward runs in no-grad mode (activations are recomputed during backward), so a
-hook on the block captures a tensor that is DETACHED from the autograd graph.
-Feeding those to the decoder would silently train with zero LoRA gradients.
-Instead we use timm's `forward_intermediates()` API, which collects the
-checkpoint *outputs* — those keep their grad_fn. `train_one_epoch_lora` also
-sanity-checks on the first batch that LoRA gradients are actually non-zero,
-and raises loudly if they are not.
+Why this avoids the forward hooks the frozen backbones in src/models.py use: with
+gradient checkpointing enabled, each block's forward runs in no-grad mode
+(activations are recomputed during backward), so a hook captures a tensor that is
+detached from the autograd graph -- feeding those to the decoder would silently
+train with zero LoRA gradients. Instead we use timm's forward_intermediates() API,
+which returns the checkpoint outputs (those keep their grad_fn). train_one_epoch_lora
+also checks on the first batch that LoRA gradients are non-zero and raises if not.
 """
 
 import math
@@ -109,7 +105,7 @@ class LoraDinoV3ViT(nn.Module):
                 "preinstalled on Kaggle; install it locally for smoke tests."
             ) from e
 
-        # 1. Load the DINOv3-pretrained ViT-B/16 encoder (gated weights — needs
+        # Load the DINOv3-pretrained ViT-B/16 encoder (gated weights — needs
         #    a prior huggingface_hub.login(); see lora/LORA.md).
         base_model = timm.create_model(
             model_name,
@@ -118,7 +114,7 @@ class LoraDinoV3ViT(nn.Module):
             dynamic_img_size=True,
         )
 
-        # 2. Freeze EVERY base parameter first; only the LoRA adapters injected
+        # Freeze EVERY base parameter first; only the LoRA adapters injected
         #    below (plus the decoder, externally) are ever trainable.
         for param in base_model.parameters():
             param.requires_grad = False
@@ -126,7 +122,7 @@ class LoraDinoV3ViT(nn.Module):
         self.patch_size = base_model.patch_embed.patch_size
         num_blocks = len(base_model.blocks)
 
-        # 3. Tap blocks: where features are read (same default contract as the
+        # Tap blocks: where features are read (same default contract as the
         #    frozen roster: blocks 2, 5, 8, 11 for ViT-B's 12).
         if tap_blocks is None:
             tap_blocks = [
@@ -142,7 +138,7 @@ class LoraDinoV3ViT(nn.Module):
         embed_dim = base_model.embed_dim
         self.out_channels = [embed_dim] * len(self.tap_blocks)
 
-        # 4. LoRA blocks: where adapters are injected. Default: all blocks.
+        # LoRA blocks: where adapters are injected. Default: all blocks.
         if lora_blocks is None:
             lora_blocks = list(range(num_blocks))
         self.lora_blocks = sorted(lora_blocks)
@@ -155,7 +151,7 @@ class LoraDinoV3ViT(nn.Module):
                         getattr(attn, attr), r=r, alpha=alpha, dropout=lora_dropout
                     ))
 
-        # 5. Gradient checkpointing: trade recompute for activation memory.
+        # Gradient checkpointing: trade recompute for activation memory.
         self.grad_checkpointing = grad_checkpointing
         if grad_checkpointing:
             base_model.set_grad_checkpointing(True)
@@ -200,17 +196,13 @@ class LoraDinoV3ViT(nn.Module):
         return [p for p in self.parameters() if p.requires_grad]
 
     def forward(self, x):
-        """
-        Args:
-            x (torch.Tensor): [B, 3, H, W], ImageNet-normalized.
-        Returns:
-            dict: len(tap_blocks) tensors of shape [B, 768, H/16, W/16],
-                  ordered shallow -> deep, same contract as the frozen roster.
+        """Returns len(tap_blocks) tensors [B, 768, H/16, W/16], shallow to deep,
+        matching the frozen roster's contract. x is ImageNet-normalized [B, 3, H, W].
 
-        NO torch.no_grad() here — that is precisely what would kill the LoRA
-        gradients. forward_intermediates collects each tapped block's output
-        AFTER the (possibly checkpointed) block call, so the tensors stay
-        attached to the autograd graph.
+        No torch.no_grad() here — that would kill the LoRA gradients.
+        forward_intermediates collects each tapped block's output after the
+        (possibly checkpointed) block call, so the tensors stay attached to the
+        autograd graph.
         """
         B, _, H, W = x.shape
         H_p = H // self.patch_size[0]   # 480 // 16 = 30
@@ -259,11 +251,10 @@ def train_one_epoch_lora(extractor, decoder, dataloader, optimizer, criterion, d
 
         optimizer.zero_grad()
 
-        # 1. EXTRACTION WITH GRAD (the whole point of the LoRA pathway)
+        # Extract with gradients enabled (the LoRA path needs them).
         features_dict = extractor(images)
         features = list(features_dict.values())
 
-        # 2. DECODE + LOSS
         raw_logits = decoder(features)
 
         matched_logits = F.interpolate(
@@ -276,11 +267,10 @@ def train_one_epoch_lora(extractor, decoder, dataloader, optimizer, criterion, d
 
         loss.backward()
 
-        # 3. FIRST-BATCH SANITY CHECK: if the features ever get detached from
-        #    the graph (e.g. a hook/checkpointing interaction), LoRA would
-        #    train silently at zero gradient. Fail loudly instead. (lora_B is
-        #    zero-init so lora_A grads are zero on the very first step, but
-        #    lora_B grads must be non-zero.)
+        # First-batch check: if the features get detached from the graph (e.g. a
+        # hook/checkpointing interaction), LoRA would train silently at zero
+        # gradient, so fail loudly instead. lora_B is zero-init, so on the first
+        # step lora_A grads are zero but lora_B grads must be non-zero.
         if first_batch:
             lora_params = [p for n, p in extractor.named_parameters() if 'lora_' in n]
             if lora_params and not any(

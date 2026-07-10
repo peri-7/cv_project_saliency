@@ -24,10 +24,9 @@ from weight_analysis.utils import run_analysis
 CKPT_PATH = '/kaggle/input/datasets/periclesalexiou/sam-decoder/best_sam_decoder.pth'
 DATA_ROOT = '/kaggle/input/datasets/roshan401/salicon'
 OUT_DIR = '/kaggle/working'
-# -----------------------------------------------------------------------------
 
 MODEL_NAME = 'sam'
-HIDDEN_DIM = 256  # ViT-B roster width (PLAN.md)
+HIDDEN_DIM = 256  # ViT-B roster width (WEIGHTS.md)
 # All four taps share the /16 grid; variety is in depth, not resolution.
 TAP_LABELS = ['block 2 (/16)', 'block 5 (/16)', 'block 8 (/16)', 'block 11 (/16)']
 

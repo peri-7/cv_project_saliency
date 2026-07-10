@@ -17,7 +17,7 @@
 # uniform IG baseline) so numbers stay comparable to your existing runs.
 
 # 1. Clone your repository directly into the Kaggle working directory
-get_ipython().system('git clone https://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@github.com/peri-7/cv_project_saliency.git')
+get_ipython().system('git clone https://github.com/peri-7/cv_project_saliency.git')
 
 import sys
 import os
@@ -39,19 +39,15 @@ from src.decoder import Decoder
 from src.losses import Composite_Loss
 from src.training_online import train_one_epoch_online, evaluate_model_online, test_model_online
 
-# ---------------------------------------------------------------------------
 # Knobs for the sweep (see cheap-by-design note at top)
-# ---------------------------------------------------------------------------
 BACKBONE = "resnet"            # "resnet" (fast, first pass) or "sam"
 HIDDEN_DIMS = [256, 512]       # extremes first; add 384 only if 512 clearly beats 256
 EPOCHS = 5                     # probe depth; bump to 10 for the final locked-width run
 SEED = 0                       # re-seeded before each decoder init for fair comparison
 
-# ---------------------------------------------------------------------------
 # Data + frozen backbone are built ONCE and reused across every hidden_dim.
 # The backbone is frozen and identical, so re-instantiating it per width would just
 # waste compute.
-# ---------------------------------------------------------------------------
 image_transform = transforms.Compose([
     transforms.Resize((480, 640)),
     transforms.ToTensor(),
@@ -89,9 +85,7 @@ elif BACKBONE == "sam":
 else:
     raise ValueError(f"Unknown BACKBONE={BACKBONE!r} (expected 'resnet' or 'sam')")
 
-# ---------------------------------------------------------------------------
 # Sweep
-# ---------------------------------------------------------------------------
 results = {}   # hidden_dim -> 7-tuple (loss, kld, cc, sim, nss, auc, ig)
 
 for hidden_dim in HIDDEN_DIMS:
@@ -140,11 +134,9 @@ for hidden_dim in HIDDEN_DIMS:
     print(f"  -> Loss {avg_loss:.4f} | KLD {avg_kld:.4f} | CC {avg_cc:.4f} | "
           f"SIM {avg_sim:.4f} | NSS {avg_nss:.4f} | AUC {avg_auc:.4f} | IG {avg_ig:.4f}")
 
-# ---------------------------------------------------------------------------
 # Summary table -- eyeball where metrics plateau. Compare against your existing
 # 128 benchmark row by hand: if 256 barely beats 128, the decoder was never the
 # ceiling; if 256 >> 128 but 512 ~= 256, lock 256.
-# ---------------------------------------------------------------------------
 print("\n" + "=" * 78)
 print(f"SWEEP SUMMARY ({BACKBONE.upper()})  --  compare vs your existing hidden_dim=128 run")
 print("=" * 78)

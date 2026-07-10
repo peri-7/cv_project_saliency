@@ -15,9 +15,7 @@ from src.losses import Composite_Loss
 from src.training import train_one_epoch, evaluate_model, test_model
 
 
-# =====================================================================
 # 1. PHASE 1 TEST: Feature Extraction (The CPU/GPU Bottleneck)
-# =====================================================================
 def test_phase_1_extraction(device):
     print("\n--- Starting Phase 1: Feature Extraction ---")
     
@@ -58,9 +56,7 @@ def test_phase_1_extraction(device):
     return extractor.out_channels
 
 
-# =====================================================================
 # 2. PHASE 2 TEST: Decoder Optimization 
-# =====================================================================
 def test_phase_2_training(device, backbone_channels):
     print("\n--- Starting Phase 2: Decoder Training ---")
     
@@ -134,9 +130,7 @@ def test_phase_2_training(device, backbone_channels):
     ''')
     
 
-# =====================================================================
 # EXECUTION
-# =====================================================================
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Testing on hardware: {device}")

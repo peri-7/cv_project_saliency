@@ -1,6 +1,6 @@
 """
 Convert a SALICON .mat fixation file to a binary PNG fixation map.
-Usage: python mat_to_png.py <input.mat> [output.png] [--radius N]
+Usage: python -m scripts.mat_to_png <input.mat> [output.png] [--radius N]
   --radius N  Radius of each fixation dot in pixels (default: 8)
 If output path is omitted, saves alongside the input file with a .png extension.
 """
@@ -54,7 +54,7 @@ def draw_dots(fixation_matrix: np.ndarray, radius: int = 8) -> Image.Image:
 def main():
     args = sys.argv[1:]
     if not args:
-        print("Usage: python mat_to_png.py <input.mat> [output.png] [--radius N]")
+        print("Usage: python -m scripts.mat_to_png <input.mat> [output.png] [--radius N]")
         sys.exit(1)
 
     mat_path = args.pop(0)
